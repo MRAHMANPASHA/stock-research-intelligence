@@ -121,11 +121,11 @@
       .socials a:hover{ background:var(--panel2); color:var(--ink); }
       .socials a .ext{ margin-left:auto; color:var(--ink3); }
 
-      /* ============ API ACCESS (user's own Gemini keys, browser-only) ============ */
+      /* ============ API ACCESS (user's own Gemini keys, browser-only — lives in the Settings view) ============ */
       .side{ overflow-y:auto; }
-      .api-box{ margin-top:18px; border-top:1px solid var(--line); padding-top:6px; }
-      .api-box .lbl{ display:block; font-family:"JetBrains Mono",monospace; font-size:10px; letter-spacing:.16em; color:var(--ink3); padding:10px 10px 6px; }
-      .api-card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin:0 2px; transition:border-color .25s, box-shadow .25s; }
+      .api-box{ max-width:640px; }
+      .api-box .lbl{ display:block; font-family:"JetBrains Mono",monospace; font-size:10px; letter-spacing:.16em; color:var(--ink3); padding:2px 2px 8px; }
+      .api-card{ background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin:0; transition:border-color .25s, box-shadow .25s; }
       .api-box.attn .api-card{ border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-dim); }
       .api-status{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; color:var(--ink2); }
       .api-status .dot{ width:8px; height:8px; border-radius:50%; background:var(--ink3); flex:none; }
@@ -409,8 +409,6 @@
         .nav button{ width:auto; padding:8px 11px; }
         .nav .cnt{ margin-left:2px; }
         .side-foot{ display:none; }
-        .api-box{ display:none; }
-        .side.open .api-box{ display:block; width:100%; margin-top:12px; }
         .side.open .side-foot{ display:flex; width:100%; margin-top:12px; }
         .side.open .socials{ flex-direction:row; gap:6px; }
         .side.open .socials a{ flex:1; }
@@ -535,27 +533,8 @@
           <span class="lbl">LIBRARY</span>
           <button data-view="sheet"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sheet Data</button>
           <button data-view="days"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg>Awareness Days<span class="cnt" id="dayCount">–</span></button>
+          <button data-view="settings"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>Settings</button>
         </nav>
-        <div class="api-box" id="apiBox">
-          <span class="lbl">API ACCESS</span>
-          <div class="api-card">
-            <div class="api-status" id="apiStatus"><span class="dot"></span><span id="apiStatusTxt">Not connected</span></div>
-            <p class="api-note">Live research runs on your own free Google Gemini key. Keys are saved only in this browser — they are sent to Google when you research, nowhere else.</p>
-            <div id="apiKeyList"></div>
-            <div class="api-add">
-              <input type="password" id="apiKeyInput" placeholder="Paste a Gemini API key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Gemini API key">
-              <button class="btn small primary" id="apiAddBtn" type="button">Add key</button>
-            </div>
-            <div class="api-help">
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key — Google AI Studio</a>
-              <ol>
-                <li>Open the link and sign in with Google.</li>
-                <li>Click “Create API key” and copy it.</li>
-                <li>Paste it above and press Add key. Add more keys and they rotate automatically when one hits its limit.</li>
-              </ol>
-            </div>
-          </div>
-        </div>
         <div class="side-foot">
           <div class="visitor">
             <span class="dot"></span>
@@ -632,8 +611,8 @@
                   <button class="btn" id="demoBtn">Load sample run (Halloween)</button>
                 </div>
                 <div class="api-notice" id="apiNotice" hidden>
-                  <span><b>Live research needs your Gemini key.</b> Add your free Google Gemini key in the sidebar's <b>API Access</b> section — then every new topic returns fresh research. The built-in sample runs (Halloween, Remote Work) work without a key.</span>
-                  <button class="btn small" id="apiNoticeBtn" type="button">Add a key</button>
+                  <span><b>Live research needs your Gemini key.</b> Open <b>Settings</b> and add your free Google Gemini key — then every new topic returns fresh research. The built-in sample runs (Halloween, Remote Work) work without a key.</span>
+                  <button class="btn small" id="apiNoticeBtn" type="button">Open Settings</button>
                 </div>
                 <div class="pipe" id="pipe">
                   <div class="pipe-top"><b id="pipeTitle">Researching…</b><span class="mono" id="pipePct">0%</span></div>
@@ -914,6 +893,35 @@
             <p class="note">A built-in list of 1,006 well-known recurring observances from around the world — single days, multi-day festivals, seasons and month-long awareness months. Fixed annual dates are exact. Days marked <strong>≈ typical date</strong> float (weekday-based, lunar or religious observances) and show their usual date — confirm the exact day before a major campaign.</p>
           </section>
 
+          <!-- ========== VIEW: SETTINGS ========== -->
+          <section class="view" id="view-settings">
+            <div class="crumb">SETTINGS / <b>API ACCESS</b></div>
+            <h2 class="vtitle">Settings</h2>
+            <p class="vsub">Live research runs on your own free Google Gemini key. Add one or more keys below — if one hits its free limit, the next is tried automatically.</p>
+            <div class="panel" style="margin-top:18px">
+              <div class="api-box" id="apiBox">
+                <span class="lbl">API ACCESS</span>
+                <div class="api-card">
+                  <div class="api-status" id="apiStatus"><span class="dot"></span><span id="apiStatusTxt">Not connected</span></div>
+                  <p class="api-note">Live research runs on your own free Google Gemini key. Keys are saved only in this browser — they are sent to Google when you research, nowhere else.</p>
+                  <div id="apiKeyList"></div>
+                  <div class="api-add">
+                    <input type="password" id="apiKeyInput" placeholder="Paste a Gemini API key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Gemini API key">
+                    <button class="btn small primary" id="apiAddBtn" type="button">Add key</button>
+                  </div>
+                  <div class="api-help">
+                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key — Google AI Studio</a>
+                    <ol>
+                      <li>Open the link and sign in with Google.</li>
+                      <li>Click “Create API key” and copy it.</li>
+                      <li>Paste it above and press Add key. Add more keys and they rotate automatically when one hits its limit.</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
         </main>
       </div>
     </div>
@@ -1036,7 +1044,7 @@
       function allPrompts(run){ var out = []; run.opportunities.forEach(function(opp, i){ var p = promptsFor(run, opp, i); out = out.concat(p.design, p.image, p.video); }); return out; }
 
       /* ================= NAVIGATION ================= */
-      var VIEW_LABELS = { home:"NEW RESEARCH", runs:"PAST RUNS", brief:"RESEARCH BRIEF", opps:"OPPORTUNITIES", opp:"OPPORTUNITY", export:"EXPORT", sheet:"SHEET DATA", days:"AWARENESS DAYS" };
+      var VIEW_LABELS = { home:"NEW RESEARCH", runs:"PAST RUNS", brief:"RESEARCH BRIEF", opps:"OPPORTUNITIES", opp:"OPPORTUNITY", export:"EXPORT", sheet:"SHEET DATA", days:"AWARENESS DAYS", settings:"SETTINGS" };
       function show(view){
         var views = document.querySelectorAll(".view");
         for (var i = 0; i < views.length; i++) views[i].classList.remove("on");
@@ -1169,7 +1177,7 @@
         ["What is Awareness Days?", "A built-in calendar of awareness days, holidays and seasonal events across the whole year, so you never need an external site to plan ahead. Every date has a Research button that starts a run for that day in one click."],
         ["Can I research any topic?", "Yes. Halloween and Remote Work ship as full sample runs, and any other topic — Diwali, Spring Gardening, Fitness at Home, anything — gets a complete brief built for it on the spot, with the full opportunity count you selected."],
         ["Is this tool free?", "Yes — researching topics, reading briefs, using the prompts and exporting CSVs are all free. There is no paywall on runs, prompts or the Awareness Days calendar."],
-        ["How does live research work?", "Add your own free Google Gemini key in the sidebar's API Access section. With a key saved, every new topic is researched fresh by Gemini using your key — full brief, ranked opportunities and all 9 prompts per opportunity. You can save several keys: if one hits its free limit, the next is tried automatically. Keys stay in your browser and are only sent to Google. Without a key, the two built-in sample runs (Halloween and Remote Work) still work."]
+        ["How does live research work?", "Add your own free Google Gemini key in Settings. With a key saved, every new topic is researched fresh by Gemini using your key — full brief, ranked opportunities and all 9 prompts per opportunity. You can save several keys: if one hits its free limit, the next is tried automatically. Keys stay in your browser and are only sent to Google. Without a key, the two built-in sample runs (Halloween and Remote Work) still work."]
       ];
       $("faqList").innerHTML = FAQS.map(function(f, i){
         return '<div class="faq-item' + (i === 0 ? " open" : "") + '"><button class="faq-q" aria-expanded="' + (i === 0) + '"><span class="n">Q' + (i + 1) + '</span>' + esc(f[0]) +
@@ -1363,7 +1371,7 @@
         if (!topic){ toast("Enter a topic first"); $("topic").focus(); return; }
         var want = parseInt($("oppTarget").value, 10) || 15;
         /* routing: the two built-in sample runs always work offline; a brand-new topic needs
-           the user's own Gemini key (live research) — without one, point them at the API section */
+           the user's own Gemini key (live research) — without one, point them at Settings */
         var tl = topic.toLowerCase();
         var isBuiltIn = (tl === "halloween" || tl === "remote work");
         if (!isBuiltIn){
@@ -4717,17 +4725,20 @@
       });
       function flagApiNeeded(){
         var notice = $("apiNotice"); if (notice) notice.hidden = false;
+        if (window.innerWidth <= 820) closeMenu();
+        show("settings");
         var box = $("apiBox");
         if (box){
           box.classList.add("attn");
           setTimeout(function(){ box.classList.remove("attn"); }, 3600);
-          if (window.innerWidth <= 820 && !sideEl.classList.contains("open")){ sideEl.classList.add("open"); menuBtn.setAttribute("aria-expanded", "true"); }
           box.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
-        toast("Add your free Gemini key first — sidebar, API Access section");
+        setTimeout(function(){ $("apiKeyInput").focus(); }, 450);
+        toast("Add your free Gemini key first — open Settings");
       }
       $("apiNoticeBtn").addEventListener("click", function(){
-        if (window.innerWidth <= 820 && !sideEl.classList.contains("open")){ sideEl.classList.add("open"); menuBtn.setAttribute("aria-expanded", "true"); }
+        if (window.innerWidth <= 820) closeMenu();
+        show("settings");
         var box = $("apiBox");
         if (box){ box.classList.add("attn"); setTimeout(function(){ box.classList.remove("attn"); }, 3600); box.scrollIntoView({ behavior: "smooth", block: "center" }); }
         setTimeout(function(){ $("apiKeyInput").focus(); }, 400);
@@ -4736,11 +4747,23 @@
 
       /* ================= LIVE RESEARCH VIA GEMINI (rotates over the saved keys) ================= */
       function geminiPrompt(topic, market, mix, horizon, count){
-        return [
-          "You are the research engine behind a stock-content research tool used by photographers, illustrators and videographers selling on Adobe Stock, Shutterstock and Getty Images.",
+        /* Variation is mandatory on every call: a fresh random seed drives new combinations,
+           and the concepts earlier runs on this same topic already used are passed along as an
+           explicit do-not-repeat list, so no two runs (or two users) ever get the same prompts. */
+        var seed = Math.floor(Math.random() * 900000) + 100000;
+        var priorTitles = [];
+        try {
+          RUNS.forEach(function(r){
+            if (r.topic && r.topic.toLowerCase() === String(topic).toLowerCase())
+              r.opportunities.forEach(function(o){ if (o.title && priorTitles.indexOf(o.title) === -1) priorTitles.push(o.title); });
+          });
+        } catch (e) {}
+        var lines = [
+          "You are the research engine behind a stock-content research tool used by photographers, illustrators and videographers selling on Adobe Stock, Shutterstock and Getty Images. The content created from your prompts is uploaded to Adobe Stock, so the Adobe Stock rules further below are hard requirements, not suggestions.",
           "Research this topic for stock-content buyers: \"" + topic + "\"",
           "Primary market: " + market + ". Content mix requested: " + mix + ". Season horizon: " + horizon + ". Today is " + new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) + ".",
           "Think like a stock research analyst: what buyers are searching for and downloading right now, what is already saturated, and when buyers search (they plan 4-8 weeks ahead of seasons and events, so upload deadlines come well before the occasion).",
+          "Variation seed for this run: " + seed + ". Use it to drive fresh combinations: deliberately vary the location, time of day, people (ages, group sizes, roles), activities, props, composition and camera angle from one opportunity to the next, and prefer less obvious, specific treatments over the first generic idea that comes to mind.",
           "Return ONLY a JSON object — no markdown fences, no commentary — with exactly this shape:",
           "{",
           '  "summary": "2-3 sentences: where demand is concentrated, what is growing, what is saturated",',
@@ -4756,8 +4779,15 @@
           '    "prompts": { "design": ["3 complete design/composition prompts"], "image": ["3 complete image-generation prompts"], "video": ["3 complete video-clip prompts, each with duration and camera movement"] }',
           "  } ]",
           "}",
-          "Rules: exactly " + count + " opportunities sorted by score descending, scores varying realistically; respect the content mix (for example if it says Photos only, every format is Photo); titles are concrete scenes a creator can shoot or generate — no brand names, no trademarks, no text or logos inside the visuals; every prompt is finished and ready to paste into design, image and video tools; demand reflects buyer search interest, competition reflects how much fresh supply already exists."
-        ].join("\n");
+          "Rules: exactly " + count + " opportunities sorted by score descending, scores varying realistically; respect the content mix (for example if it says Photos only, every format is Photo); titles are concrete scenes a creator can shoot or generate; every prompt is finished and ready to paste into design, image and video tools; demand reflects buyer search interest, competition reflects how much fresh supply already exists.",
+          "ADOBE STOCK — NO IP, NO BRANDS (strict): no title or prompt may name or depict any brand, company, logo, trademark, famous product, celebrity, public figure, film / book / game title, or copyrighted character or design. Describe everything generically instead (for example 'a red sports car', never a car brand; 'a smiling woman in her thirties', never a celebrity's name; 'a generic smartphone with a blank screen', never a product name). No readable text, words, labels or logos inside any visual.",
+          "ADOBE STOCK — NO SIMILAR CONTENT (strict): Adobe Stock rejects submissions that are too similar to content already on the marketplace. Every opportunity in this set must be clearly different from every other one — different concept, scene, setting, composition, camera angle, subjects, props and mood. No near-duplicates, and no same scene merely reworded. This also applies inside one opportunity: its 3 design, 3 image and 3 video prompts must each describe a distinct treatment (different framing, moment, setting detail or camera move), never the same shot paraphrased.",
+          "FRESH AND UNIQUE EVERY RUN (strict): this topic may be researched many times, by many different users. Every run must be original — new scenes, locations, times, people, activities, compositions, camera angles and wording each time — so no prompt is ever repeated word-for-word, or even in concept, from an earlier run, and no two users receive the same prompts. If a concept feels like the obvious standard treatment of this topic, replace it with a fresher angle."
+        ];
+        if (priorTitles.length){
+          lines.push("DO NOT REPEAT — earlier runs on this exact topic already used these opportunity concepts: " + priorTitles.join(" | ") + ". Do not reuse any of them, and do not produce close variants of them either: choose different scenes, subjects, settings, compositions and angles, so this run is clearly different from every earlier run.");
+        }
+        return lines.join("\n");
       }
       function callGemini(key, promptText){
         return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent", {
@@ -4826,8 +4856,8 @@
         return run;
       }
       function friendlyGeminiError(err){
-        if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in the sidebar and it will be used automatically.";
-        if (err && (err.status === 400 || err.status === 401 || err.status === 403 || /api key/i.test(err.gmsg || ""))) return "Google did not accept the API key. Open AI Studio, copy the key again, remove the old one in the sidebar and add the fresh copy.";
+        if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in Settings and it will be used automatically.";
+        if (err && (err.status === 400 || err.status === 401 || err.status === 403 || /api key/i.test(err.gmsg || ""))) return "Google did not accept the API key. Open AI Studio, copy the key again, remove the old one in Settings and add the fresh copy.";
         if (err && err.message === "gemini-short") return "Gemini sent back an incomplete brief this time. Please run the research again.";
         if (err && (err.message === "gemini-parse" || err.message === "gemini-shape" || err.message === "gemini-empty")) return "Gemini sent back an answer that could not be read. Please run the research again.";
         if (err && err.name === "TypeError") return "Could not reach Google Gemini — check your internet connection and try again.";
