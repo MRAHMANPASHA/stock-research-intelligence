@@ -118,6 +118,11 @@
       .socials a{ display:flex; align-items:center; gap:9px; color:var(--ink2); text-decoration:none; font-size:13px; font-weight:600; padding:7px 10px; border-radius:8px; }
       .socials a:hover{ background:var(--panel2); color:var(--ink); }
       .socials a .ext{ margin-left:auto; color:var(--ink3); }
+      /* mobile menu toggle — only visible in the ≤820px layout */
+      .menubtn{ display:none; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line2); color:var(--ink); font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:700; letter-spacing:.1em; padding:8px 13px; border-radius:9px; }
+      .menubtn .ic-close{ display:none; }
+      .side.open .menubtn .ic-open{ display:none; }
+      .side.open .menubtn .ic-close{ display:block; }
       @keyframes pulse{ 0%,100%{ opacity:1 } 50%{ opacity:.35 } }
 
       .main{ min-width:0; display:flex; flex-direction:column; }
@@ -356,15 +361,25 @@
       }
       @media (max-width:820px){
         .app{ grid-template-columns:1fr; }
-        .side{ position:static; height:auto; flex-direction:column; padding:14px; }
-        .brand{ padding-bottom:12px; }
-        .nav{ flex-direction:row; flex-wrap:wrap; margin-top:10px; }
+        /* mobile only: the sidebar collapses into a slim sticky top bar (brand + MENU button);
+           the nav, visitor card and socials live in the panel that opens under it */
+        .side{ position:sticky; top:0; z-index:50; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; padding:10px 14px; box-shadow:0 8px 22px rgba(0,0,0,.22); }
+        .brand{ padding:0; border-bottom:none; gap:9px; }
+        .brand .mark{ width:32px; height:32px; border-radius:8px; }
+        .brand b{ font-size:13px; }
+        .brand span{ font-size:9.5px; }
+        .menubtn{ display:inline-flex; margin-left:auto; }
+        .nav{ display:none; }
+        .side.open .nav{ display:flex; flex-direction:row; flex-wrap:wrap; width:100%; margin-top:12px; padding-top:8px; border-top:1px solid var(--line); }
         .nav .lbl{ width:100%; padding:4px 4px 2px; }
         .nav button{ width:auto; padding:8px 11px; }
         .nav .cnt{ margin-left:2px; }
-        .side-foot{ margin-top:14px; }
+        .side-foot{ display:none; }
+        .side.open .side-foot{ display:flex; width:100%; margin-top:12px; }
+        .side.open .socials{ flex-direction:row; gap:6px; }
+        .side.open .socials a{ flex:1; }
         .content{ padding:18px 14px 0; }
-        .topbar{ padding:11px 14px; }
+        .topbar{ position:static; padding:11px 14px; }
         .topbar .date{ display:none; }
         .hero{ min-height:452px; }
         .hero-in{ padding:22px 18px 0; }
@@ -469,6 +484,11 @@
           <span class="mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="11" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="14" rx="1"/><rect x="16" y="14" width="4" height="6" rx="1"/></svg></span>
           <div><b>Stock Research<br>Intelligence</b><span>BY RAHMAN PASHA</span></div>
         </div>
+        <button class="menubtn" id="menuBtn" type="button" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav">
+          <svg class="ic-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          <svg class="ic-close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          MENU
+        </button>
         <nav class="nav" id="nav">
           <span class="lbl">WORKSPACE</span>
           <button data-view="home" class="active"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>New Research</button>
@@ -970,6 +990,15 @@
         var b = e.target.closest("button"); if (!b || b.disabled) return;
         show(b.getAttribute("data-view"));
       });
+      /* mobile: MENU button opens/closes the sidebar panel; picking a view closes it */
+      var sideEl = document.querySelector(".side"), menuBtn = $("menuBtn");
+      function closeMenu(){ sideEl.classList.remove("open"); menuBtn.setAttribute("aria-expanded", "false"); }
+      menuBtn.addEventListener("click", function(){
+        var open = sideEl.classList.toggle("open");
+        menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      $("nav").addEventListener("click", function(){ if (window.innerWidth <= 820) closeMenu(); });
+      document.addEventListener("click", function(e){ if (e.target.closest("[data-goto]") && window.innerWidth <= 820) closeMenu(); });
       document.addEventListener("click", function(e){
         var g = e.target.closest("[data-goto]");
         if (g){ e.preventDefault(); show(g.getAttribute("data-goto")); }
