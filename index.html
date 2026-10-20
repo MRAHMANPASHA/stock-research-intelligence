@@ -349,19 +349,24 @@
       .filterbar{ display:flex; gap:7px; flex-wrap:wrap; margin:16px 0 18px; }
       .filterbar button{ background:var(--panel); border:1px solid var(--line2); color:var(--ink2); font-size:12.5px; font-weight:700; padding:7px 15px; border-radius:99px; }
       .filterbar button.on{ background:var(--acc); border-color:var(--acc); color:var(--acc-ink); }
-      .opp-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
-      .opp{ background:var(--panel); border:1px solid var(--line); border-radius:13px; overflow:hidden; cursor:pointer; transition:border-color .15s, transform .15s; text-align:left; padding:0; color:var(--ink); width:100%; }
-      .opp:hover{ border-color:var(--acc); transform:translateY(-2px); }
-      .opp .im{ position:relative; }
-      .opp .im img{ width:100%; height:158px; object-fit:cover; display:block; }
+      .opp-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; align-items:stretch; }
+      .opp{ background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; cursor:pointer; transition:border-color .15s, transform .15s, box-shadow .15s; text-align:left; padding:0; color:var(--ink); width:100%; font:inherit; display:flex; flex-direction:column; height:100%; }
+      .opp:hover{ border-color:var(--acc); transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.18); }
+      .opp .im{ position:relative; display:block; flex:none; }
+      .opp .im img{ width:100%; height:168px; object-fit:cover; display:block; }
       .opp .rank{ position:absolute; top:10px; left:10px; font-family:"JetBrains Mono",monospace; font-size:10.5px; font-weight:700; background:rgba(4,7,11,.85); color:var(--acc); border:1px solid rgba(37,208,238,.4); padding:3px 8px; border-radius:6px; }
-      .opp .score{ position:absolute; top:10px; right:10px; font-family:"JetBrains Mono",monospace; font-size:13px; font-weight:700; background:rgba(4,7,11,.85); padding:3px 9px; border-radius:6px; border:1px solid var(--line2); }
-      .opp .bd{ padding:13px 15px 15px; }
-      .opp .bd b{ display:block; font-size:14px; line-height:1.4; min-height:39px; }
-      .meter{ display:flex; align-items:center; gap:8px; margin-top:8px; font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--ink3); letter-spacing:.06em; }
-      .meter .track{ flex:1; height:5px; background:var(--panel3); border-radius:99px; overflow:hidden; }
+      .opp .score{ position:absolute; top:10px; right:10px; font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:700; letter-spacing:.08em; background:rgba(4,7,11,.85); padding:4px 9px; border-radius:6px; border:1px solid var(--line2); }
+      .opp .bd{ padding:14px 16px 15px; display:flex; flex-direction:column; gap:11px; flex:1; min-width:0; }
+      .opp .bd > b{ display:block; font-size:14.5px; font-weight:700; line-height:1.38; min-height:40px; }
+      .opp .meters{ display:block; margin-top:auto; }
+      .opp .ft{ display:flex; align-items:center; justify-content:space-between; gap:10px; border-top:1px solid var(--line); padding-top:11px; }
+      .opp .ft .p9{ font-family:"JetBrains Mono",monospace; font-size:9.5px; letter-spacing:.13em; color:var(--ink3); white-space:nowrap; }
+      .meter{ display:flex; align-items:center; gap:10px; font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--ink3); letter-spacing:.07em; }
+      .meter + .meter{ margin-top:8px; }
+      .meter .ml{ flex:0 0 88px; white-space:nowrap; }
+      .meter .track{ flex:1 1 auto; min-width:0; height:5px; background:var(--panel3); border-radius:99px; overflow:hidden; }
       .meter .track i{ display:block; height:100%; border-radius:99px; }
-      .meter .v{ width:22px; text-align:right; color:var(--ink2); }
+      .meter .v{ flex:0 0 24px; text-align:right; color:var(--ink); font-weight:700; }
 
       /* opp detail */
       .opp-hero{ margin:18px 0 0; border-radius:14px; overflow:hidden; border:1px solid var(--line2); position:relative; }
@@ -371,9 +376,10 @@
       .ptabs{ display:flex; gap:7px; margin:20px 0 14px; flex-wrap:wrap; }
       .ptabs button{ background:var(--panel); border:1px solid var(--line2); color:var(--ink2); font-size:13px; font-weight:700; padding:8px 16px; border-radius:9px; }
       .ptabs button.on{ background:var(--acc-dim); border-color:var(--acc); color:var(--ink); }
-      .prompt{ background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:15px 17px; margin-bottom:11px; display:flex; gap:14px; align-items:flex-start; }
-      .prompt p{ margin:0; flex:1; font-size:13.5px; color:var(--ink); }
-      .prompt .pk{ display:block; font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--ink3); margin-top:7px; }
+      .prompt{ background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:15px 17px; margin-bottom:11px; display:flex; flex-direction:column; gap:10px; }
+      .prompt .pjson{ margin:0; font-family:"JetBrains Mono",monospace; font-size:11.5px; line-height:1.6; white-space:pre-wrap; word-break:break-word; color:var(--ink); max-height:360px; overflow:auto; }
+      .prompt .prow{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+      .prompt .pk{ font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--ink3); }
       .backlink{ background:none; border:none; color:var(--acc); font-size:13px; font-weight:700; padding:0; display:inline-flex; gap:6px; align-items:center; }
 
       /* sheet */
@@ -382,6 +388,7 @@
       .sheet-wrap td{ font-size:12.5px; color:var(--ink2); }
       .sheet-wrap td strong{ color:var(--ink); }
       .sthumb{ width:44px; height:30px; object-fit:cover; border-radius:5px; border:1px solid var(--line2); display:block; }
+      .celljson{ display:block; white-space:pre-wrap; word-break:break-word; font-family:"JetBrains Mono",monospace; font-size:10.5px; line-height:1.5; min-width:320px; max-width:520px; max-height:190px; overflow:auto; color:var(--ink2); }
 
       /* days */
       .day-group{ font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.15em; color:var(--acc); margin:22px 0 6px; }
@@ -1025,6 +1032,127 @@
       RUNS.forEach(assignImages);
 
       /* ================= PROMPTS (9 per opportunity) ================= */
+      /* ================= STRUCTURED JSON PROMPTS =================
+         Every prompt — design, image and video — is one JSON object built on
+         the same skeleton (prompt / style / subject / composition /
+         lighting_and_color / typography / negative_prompt / technical /
+         metadata), adapted per type. The prompt's text IS that JSON: the
+         detail screen pretty-prints it, Copy carries it whole, and the
+         Sheet Prompts tab + Prompts CSV hold the same JSON in the cell. */
+      var PJ_NEG = "brand logos, trademarks, readable brand text, watermark, celebrity likeness, copyrighted characters, distorted anatomy, extra fingers, low resolution, blurry, cluttered background";
+      var PJ_PALETTES = [
+        ["#F7EAD9", "#E3B34C", "#9C6B30", "#4A3220", "#FFF9EF"],
+        ["#E9F2F8", "#7FB3D5", "#2E6DA4", "#1B2A3A", "#FFFFFF"],
+        ["#EDF5E9", "#8FBC7A", "#4E7A3A", "#22351B", "#FBFDF8"],
+        ["#FDF0EC", "#E8A08A", "#C05B2E", "#4A2418", "#FFF9F5"],
+        ["#F3F0FA", "#A79BDB", "#5E4FA3", "#241D42", "#FAF9FF"],
+        ["#FFF7E0", "#E8C95A", "#A67C1B", "#3D2E08", "#FFFEF5"]
+      ];
+      var PJ_FRAMING = ["wide establishing shot", "medium shot, subject filling the centre third", "close-up detail shot"];
+      var PJ_ANGLE = ["eye-level camera", "slightly elevated camera, 30 degrees", "low-angle camera looking up"];
+      var PJ_DOF = ["shallow depth of field, f/2.8 background blur", "moderate depth of field, f/5.6", "deep focus, f/8, everything sharp"];
+      var PJ_FOCAL = ["35mm lens", "50mm lens", "85mm lens"];
+      var PJ_COMP = ["rule of thirds, subject on the left intersection, copy space on the right", "centred symmetrical composition", "rule of thirds, subject on the right intersection, copy space on the left"];
+      var PJ_LIGHT = ["soft natural window light", "warm golden-hour sunlight", "bright diffused daylight"];
+      var PJ_LIGHTDIR = ["key light from the left", "key light from camera-right at 45 degrees", "gentle backlight with frontal fill"];
+      var PJ_CONTRAST = ["soft, low contrast with lifted shadows", "balanced contrast, true-to-life tones", "rich contrast with deep shadows and bright highlights"];
+      var PJ_ASPECT = ["16:9", "4:5", "1:1"];
+      var PJ_CAMMOVE = ["slow push-in toward the subject", "gentle lateral gimbal glide", "locked-off tripod shot with natural in-frame motion"];
+      function pjTags(topic, opp){
+        var seen = {}, tags = [];
+        (topic + " " + opp.title).toLowerCase().split(/[^a-z0-9]+/).forEach(function(w){
+          if (w.length > 3 && !seen[w]){ seen[w] = 1; tags.push(w); }
+        });
+        ["stock content", "commercial use", "copy space"].forEach(function(x){ if (tags.indexOf(x) === -1) tags.push(x); });
+        return tags.slice(0, 12);
+      }
+      function pjStr(v, dflt){ return (typeof v === "string" && v.trim()) ? v : dflt; }
+      function pjStrArr(v, dflt){ return (Array.isArray(v) && v.length) ? v.map(function(x){ return String(x); }) : dflt; }
+      function pjMerge(base, src){
+        if (!src || typeof src !== "object") return base;
+        function take(bv, sv){
+          if (typeof bv === "boolean") return !!sv;
+          if (typeof bv === "number") return (typeof sv === "number" && isFinite(sv)) ? sv : bv;
+          if (Array.isArray(bv)) return pjStrArr(sv, bv);
+          if (bv && typeof bv === "object"){
+            if (sv && typeof sv === "object" && !Array.isArray(sv)){
+              var out = {};
+              Object.keys(bv).forEach(function(k){ out[k] = (k in sv) ? take(bv[k], sv[k]) : bv[k]; });
+              return out;
+            }
+            return bv;
+          }
+          return pjStr(sv, bv);
+        }
+        Object.keys(base).forEach(function(k){ if (k in src) base[k] = take(base[k], src[k]); });
+        return base;
+      }
+      function pjBuild(type, prose, topic, opp, n, src){
+        var i = (n - 1) % 3;
+        var pal = PJ_PALETTES[(n + opp.title.length) % PJ_PALETTES.length];
+        var t = opp.title;
+        var lighting = { lighting_type: PJ_LIGHT[i], lighting_direction: PJ_LIGHTDIR[i], color_palette: pal, contrast_and_tonality: PJ_CONTRAST[i] };
+        var meta = { title: t, description: String(opp.why || "").slice(0, 200), tags: pjTags(topic, opp), category: "" };
+        var base;
+        if (type === "design"){
+          meta.category = "Design · " + topic;
+          base = {
+            prompt: prose || ("Design asset brief: " + t + " — a clean commercial design composition on the theme of " + topic + ", built for headline placement and agency upload."),
+            style: { medium: "vector illustration / graphic design asset", artistic_style: "flat modern illustration with subtle grain", aesthetic: "clean, minimal, print-ready", render_or_film: "layered vector shapes, scalable at any size" },
+            subject: { primary_subject: t, secondary_elements: "supporting props and seasonal details from the brief, arranged around the main subject", silhouette_and_proportions: "bold simple silhouettes; the main subject occupies about 40% of the frame" },
+            composition: { framing: PJ_FRAMING[i], camera_angle: "straight-on design view", depth_of_field: "flat design depth, all elements crisp", focal_length: "n/a — flat design", rule_of_thirds_or_symmetry: PJ_COMP[i] },
+            lighting_and_color: { lighting_type: "flat even design lighting with soft shape shadows", lighting_direction: PJ_LIGHTDIR[i], color_palette: pal, contrast_and_tonality: PJ_CONTRAST[i] },
+            typography: { has_text: true, exact_text: "generic placeholder headline about " + topic.toLowerCase(), font_style: "clean modern sans-serif, bold display weight, generous letter spacing" },
+            negative_prompt: PJ_NEG,
+            technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras" } },
+            metadata: meta
+          };
+        } else if (type === "video"){
+          meta.category = "Video · " + topic;
+          base = {
+            prompt: prose || ("Stock video clip: " + t + " — " + PJ_CAMMOVE[i] + ", natural unhurried subject motion, one continuous take, no cuts, clean frame edges kept clear for overlay text."),
+            style: { medium: "video footage", artistic_style: "cinematic realism", aesthetic: "natural, authentic, commercial stock quality", render_or_film: "4K video, fine natural grain, soft highlight roll-off" },
+            subject: { primary_subject: t, secondary_elements: "environment and props that support the action, moving naturally in frame", silhouette_and_proportions: "subject clearly readable at thumbnail size; realistic proportions throughout the move" },
+            composition: { framing: PJ_FRAMING[i], camera_angle: PJ_ANGLE[i], depth_of_field: PJ_DOF[i], focal_length: PJ_FOCAL[i], rule_of_thirds_or_symmetry: PJ_COMP[i] },
+            lighting_and_color: lighting,
+            typography: { has_text: false, exact_text: "", font_style: "" },
+            negative_prompt: PJ_NEG + ", camera shake, jump cuts, flicker, warped motion",
+            technical: { aspect_ratio: "16:9", duration_seconds: [6, 8, 10][i], fps: 24, camera_movement: PJ_CAMMOVE[i], motion_guidance: "one continuous move, natural subject motion, clean loop point, no cuts" },
+            metadata: meta
+          };
+        } else {
+          meta.category = "Photo · " + topic;
+          base = {
+            prompt: prose || ("Photorealistic stock photo: " + t + ", authentic people and environment, natural expressions, commercial licensing quality, high detail."),
+            style: { medium: "digital photograph", artistic_style: "photorealistic editorial", aesthetic: "natural, authentic, commercial stock quality", render_or_film: "full-frame digital capture, fine film-grain finish" },
+            subject: { primary_subject: t, secondary_elements: "supporting props and environment described in the prompt, nothing branded", silhouette_and_proportions: "realistic proportions; subject clearly readable at thumbnail size" },
+            composition: { framing: PJ_FRAMING[i], camera_angle: PJ_ANGLE[i], depth_of_field: PJ_DOF[i], focal_length: PJ_FOCAL[i], rule_of_thirds_or_symmetry: PJ_COMP[i] },
+            lighting_and_color: lighting,
+            typography: { has_text: false, exact_text: "", font_style: "" },
+            negative_prompt: PJ_NEG,
+            technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw --v 6", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras" } },
+            metadata: meta
+          };
+        }
+        return pjMerge(base, src);
+      }
+      function pjString(type, prose, topic, opp, n, src){ return JSON.stringify(pjBuild(type, prose, topic, opp, n, src), null, 2); }
+      /* Normalise whatever a live model returned — proper JSON objects, JSON
+         strings, or plain prose — into skeleton-complete JSON prompt strings. */
+      function normPrompts(type, arr, topic, opp){
+        if (!Array.isArray(arr)) return [];
+        var out = [];
+        arr.slice(0, 3).forEach(function(en, i){
+          if (en && typeof en === "object" && !Array.isArray(en)) out.push(pjString(type, "", topic, opp, i + 1, en));
+          else if (typeof en === "string" && en.trim()){
+            var parsed = null; try { parsed = JSON.parse(en); } catch (e) {}
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) out.push(pjString(type, "", topic, opp, i + 1, parsed));
+            else out.push(pjString(type, en.trim(), topic, opp, i + 1, null));
+          }
+        });
+        return out;
+      }
+
       function promptsFor(run, opp, idx){
         var t = opp.title, topic = run.topic;
         var keyBase = run.id.toLowerCase() + "-o" + (idx + 1);
@@ -1032,22 +1160,26 @@
         if (opp.prompts && opp.prompts.design && opp.prompts.image && opp.prompts.video){
           return { design: wrap(opp.prompts.design, "design"), image: wrap(opp.prompts.image, "image"), video: wrap(opp.prompts.video, "video") };
         }
-        var design = [
+        var designProse = [
           "Design a stock-ready composition: " + t + " — strong focal point in the left third, generous negative space for headline text, warm seasonal palette, no text or logos in frame.",
           "Create a versatile design asset based on \"" + t + "\": layered depth (foreground prop, mid subject, soft background), balanced symmetry, export-friendly margins on all sides.",
           "Design brief for " + topic + ": hero visual of " + t.toLowerCase() + ", premium editorial style, consistent lighting direction, space at top for title placement, high commercial appeal."
         ];
-        var image = [
+        var imageProse = [
           "Photorealistic stock photo: " + t + ", shot on 50mm lens, natural window light, authentic candid expressions, shallow depth of field, high detail, commercial licensing quality.",
           "Editorial photograph: " + t.toLowerCase() + " — real people, real environment, no staged posing, muted warm color grade, copy space on the right side of frame.",
           "Bright lifestyle image: " + t + ", golden-hour ambience, crisp focus on the main subject, background softly blurred, suitable for web hero banners and social crops (4:5 safe area)."
         ];
-        var video = [
+        var videoProse = [
           "6-second stock video loop: " + t + " — slow push-in camera move, seamless loop point, no cuts, natural motion, 4K, clean frame edges for text overlay.",
           "Vertical 9:16 stock clip (8s): " + t.toLowerCase() + ", handheld-authentic feel, subject enters frame in first second, hold final pose 2 seconds for end-card text.",
           "Cinematic b-roll (10s): " + t + ", gentle gimbal glide, rich ambient detail, soft highlight roll-off, deliver with 16:9 and 1:1 safe framing."
         ];
-        return { design: wrap(design, "design"), image: wrap(image, "image"), video: wrap(video, "video") };
+        return {
+          design: wrap(designProse.map(function(p, i){ return pjString("design", p, topic, opp, i + 1, null); }), "design"),
+          image: wrap(imageProse.map(function(p, i){ return pjString("image", p, topic, opp, i + 1, null); }), "image"),
+          video: wrap(videoProse.map(function(p, i){ return pjString("video", p, topic, opp, i + 1, null); }), "video")
+        };
       }
       function allPrompts(run){ var out = []; run.opportunities.forEach(function(opp, i){ var p = promptsFor(run, opp, i); out = out.concat(p.design, p.image, p.video); }); return out; }
 
@@ -1228,7 +1360,7 @@
 
       /* ================= OPEN A RUN: BRIEF / OPPS / EXPORT ================= */
       function meter(label, val, color){
-        return '<div class="meter"><span style="width:86px">' + label + '</span><span class="track"><i style="width:' + val + '%;background:' + color + '"></i></span><span class="v">' + val + '</span></div>';
+        return '<div class="meter"><span class="ml">' + label + '</span><span class="track"><i style="width:' + val + '%;background:' + color + '"></i></span><span class="v">' + val + '</span></div>';
       }
       function openRun(run){
         currentRun = run;
@@ -1262,9 +1394,10 @@
         var list = run.opportunities.map(function(o, i){ return { o:o, i:i }; }).filter(function(x){ return oppFilterFmt === "All" || x.o.format === oppFilterFmt; });
         $("oppGrid").innerHTML = list.map(function(x){
           var o = x.o;
-          return '<button class="opp" data-opp="' + x.i + '"><span class="im"><img src="' + o.img + '" alt="' + esc(o.title) + '"><span class="rank">#' + (x.i + 1) + '</span><span class="score" style="color:' + (o.score >= 85 ? "var(--green)" : o.score >= 78 ? "var(--amber)" : "var(--ink2)") + '">' + o.score + '</span></span>' +
-            '<span class="bd"><b>' + esc(o.title) + '</b><span class="pill fmt">' + o.format.toUpperCase() + '</span>' +
-            meter("DEMAND", o.demand, "var(--acc)") + meter("COMPETITION", o.competition, "var(--amber)") + '</span></button>';
+          return '<button class="opp" data-opp="' + x.i + '"><span class="im"><img src="' + o.img + '" alt="' + esc(o.title) + '" loading="lazy"><span class="rank">#' + (x.i + 1) + '</span><span class="score" style="color:' + (o.score >= 85 ? "var(--green)" : o.score >= 78 ? "var(--amber)" : "var(--ink2)") + '">SCORE ' + o.score + '</span></span>' +
+            '<span class="bd"><b>' + esc(o.title) + '</b>' +
+            '<span class="meters">' + meter("DEMAND", o.demand, "var(--acc)") + meter("COMPETITION", o.competition, "var(--amber)") + '</span>' +
+            '<span class="ft"><span class="pill fmt">' + o.format.toUpperCase() + '</span><span class="p9">9 PROMPTS</span></span></span></button>';
         }).join("") || '<p style="color:var(--ink3)">No opportunities in this format for this run.</p>';
       }
       $("oppFilter").addEventListener("click", function(e){
@@ -1290,10 +1423,15 @@
         renderPrompts();
         show("opp");
       }
+      function prettyPrompt(text){
+        try { var o = JSON.parse(text); if (o && typeof o === "object" && !Array.isArray(o)) return JSON.stringify(o, null, 2); } catch (e) {}
+        return text;
+      }
       function renderPrompts(){
         var p = promptsFor(currentRun, currentOpp, currentOppIdx)[currentTab];
         $("promptList").innerHTML = p.map(function(pr){
-          return '<div class="prompt"><p>' + esc(pr.text) + '<span class="pk">' + pr.key + '</span></p><button class="btn small" data-copy="' + esc(pr.text) + '">Copy</button></div>';
+          var pretty = prettyPrompt(pr.text);
+          return '<div class="prompt"><pre class="pjson">' + esc(pretty) + '</pre><div class="prow"><span class="pk">' + pr.key + '</span><button class="btn small" data-copy="' + esc(pretty) + '">Copy</button></div></div>';
         }).join("");
       }
       $("promptTabs").addEventListener("click", function(e){
@@ -1519,7 +1657,7 @@
         $("sheetOpps").innerHTML=sheetTable(["run_id","opp_id","rank","image","title","format","demand","competition","score","rationale"],
           run.opportunities.map(function(o,i){ return ['<span class="mono">'+run.id+'</span>','OPP-'+(i+1),i+1,(o.img?'<img class="sthumb" src="'+o.img+'" alt="'+esc(o.title)+'">':''),'<strong>'+esc(o.title)+'</strong>',esc(o.format),o.demand,o.competition,'<strong>'+o.score+'</strong>',esc(o.why)]; }));
         // Prompts — 135 rows
-        var prows=[]; allPrompts(run).forEach(function(p,i){ var oi=Math.floor(i/9); prows.push(['<span class="mono">'+run.id+'</span>','OPP-'+(oi+1),esc(run.opportunities[oi].title),esc(p.type),p.n,esc(p.text),'<span class="mono" style="font-size:11px">'+p.key+'</span>','<button class="btn small" data-sheetcopy="'+esc(p.text)+'">Copy</button>']); });
+        var prows=[]; allPrompts(run).forEach(function(p,i){ var oi=Math.floor(i/9); prows.push(['<span class="mono">'+run.id+'</span>','OPP-'+(oi+1),esc(run.opportunities[oi].title),esc(p.type),p.n,'<span class="celljson">'+esc(p.text)+'</span>','<span class="mono" style="font-size:11px">'+p.key+'</span>','<button class="btn small" data-sheetcopy="'+esc(p.text)+'">Copy</button>']); });
         $("sheetPrompts").innerHTML=sheetTable(["run_id","opp_id","opportunity","type","n","prompt","prompt_key","use"], prows);
         // Sources
         $("sheetSources").innerHTML=sheetTable(["source","signals","share","status"], SOURCES.map(function(s){ var n=run.sourceCounts[s.key]||0; var tot2=0; Object.keys(run.sourceCounts).forEach(function(k){tot2+=run.sourceCounts[k]}); return [esc(s.name),n, Math.round(n/tot2*100)+'%','<span class="pill pass">CONNECTED</span>']; }));
@@ -4455,11 +4593,81 @@
         var hardQ = run.opportunities.map(function (o) { return EV_HARD.test(run.topic + " " + o.title); });
         var qtTopic = evQueryToks(run.topic);
         var topicSc = EV_LIB.map(function (e, i) { return evPairScore(qtTopic, i)[0]; });
-        var titleSc = run.opportunities.map(function (o) {
-          var qt = evQueryToks(o.title);
-          return EV_LIB.map(function (e, i) { return evPairScore(qt, i)[0]; });
+        /* Opportunity scoring is deliberately gentler than the shared
+           day-name scorer (evPairScore): its rarity bonuses (+10 for a token
+           found on a single photo) let incidental words — "flat lay",
+           "setup", "grass" — outscore the concept itself, and day-name
+           aliases ("heritage" -> "landmark travel tourism") explode any
+           title that merely contains the word. So here the rarity bonus is
+           capped, and the title's own words lead, alias expansions second. */
+        function oppPair(qt, idx) {
+          var s = 0, matched = 0, set = EV_TAGS[idx];
+          Object.keys(set).forEach(function (t) {
+            var hit = false;
+            for (var i = 0; i < qt.length; i++) if (evMatch(t, qt[i])) { hit = true; break; }
+            if (hit) {
+              matched++;
+              s += EV_W[t] || 1;
+              var d = EV_DF[t] || 99;
+              if (d === 1) s += 4; else if (d === 2) s += 2; else if (d === 3) s += 1;
+            }
+          });
+          return [s, matched / Math.max(1, Object.keys(set).length), matched];
+        }
+        var rawSc = run.opportunities.map(function (o) {
+          var qt = evToks(o.title);
+          return EV_LIB.map(function (e, i) { return oppPair(qt, i); });
         });
-        function deal(pairs) {
+        var aliSc = run.opportunities.map(function (o) {
+          var qt = evQueryToks(o.title);
+          return EV_LIB.map(function (e, i) { return oppPair(qt, i); });
+        });
+        function pairVal(oi, idx) {
+          var r = rawSc[oi][idx], a = aliSc[oi][idx];
+          return r[0] * 10 + a[0] * 3 + r[1] * 5 + r[2] * 6 + topicSc[idx];
+        }
+        /* Visual series: batches of near-identical photos share one filename
+           stem AND one tag string (autumnpath2-01…06 "autumn forest path",
+           forest2-01…03, garden-01…05). Uniqueness per file is not enough —
+           a run may take at most a couple from any one series, or the grid
+           fills with the same-looking shot on card after card. Series whose
+           members carry distinct tags (hw-01…15) are not capped in practice:
+           each has its own series key. */
+        function seriesKey(idx) {
+          var base = EV_LIB[idx].f.split("/").pop().replace(/\.jpg$/, "").replace(/-\d+$/, "").replace(/\d+$/, "");
+          return base + "|" + EV_LIB[idx].t;
+        }
+        var seriesUsed = {};
+        /* Season gate: a strongly seasonal photo (winter snow, spring blossom)
+           may only illustrate a run that asks for that season — in the topic or
+           in the card's own title — never a run about a different season. */
+        var SEASON_WORDS = [["autumn", ["autumn", "fall"]], ["winter", ["winter", "snow"]], ["spring", ["spring", "blossom"]], ["summer", ["summer"]]];
+        function seasonsOf(text) {
+          var low = text.toLowerCase(), found = {};
+          SEASON_WORDS.forEach(function (g) {
+            for (var i = 0; i < g[1].length; i++) {
+              if (new RegExp("\\b" + g[1][i]).test(low)) { found[g[0]] = 1; break; }
+            }
+          });
+          return found;
+        }
+        var imgSeasons = EV_LIB.map(function (e) { return seasonsOf(e.t); });
+        var runSeasons = seasonsOf(run.topic + " " + run.opportunities.map(function (o) { return o.title; }).join(" "));
+        var oppSeasons = run.opportunities.map(function (o) { return seasonsOf(run.topic + " " + o.title); });
+        function seasonConflict(oi, idx) {
+          var is = imgSeasons[idx];
+          if (!Object.keys(is).length) return false;
+          for (var g in is) { if (oppSeasons[oi][g] || runSeasons[g]) return false; }
+          /* none of this photo's seasons is asked for anywhere in the run */
+          if (!Object.keys(runSeasons).length && !is.winter) return false; /* seasonless run: only snow is gated */
+          return true;
+        }
+        var bestTitle = run.opportunities.map(function (o, oi) {
+          var b = 0;
+          rawSc[oi].forEach(function (v) { if (v[0] > b) b = v[0]; });
+          return b;
+        });
+        function deal(pairs, seriesCap) {
           pairs.sort(function (a, b) {
             if (b[0] !== a[0]) return b[0] - a[0];
             var ta = run.opportunities[a[1]].title, tb = run.opportunities[b[1]].title;
@@ -4470,45 +4678,56 @@
             var f = EV_LIB[p[2]].f;
             if (res[p[1]] !== undefined || used[f]) return;
             if (EV_HARD.test(EV_LIB[p[2]].t) && !hardQ[p[1]]) return;
-            res[p[1]] = f; used[f] = 1;
+            if (seasonConflict(p[1], p[2])) return;
+            var sk = seriesKey(p[2]);
+            /* series cap — waived when this picture is genuinely among the
+               card's own best title matches, so an on-concept series is
+               never blocked in favour of an off-topic one */
+            if ((seriesUsed[sk] || 0) >= seriesCap && rawSc[p[1]][p[2]][0] < bestTitle[p[1]] * 0.6) return;
+            res[p[1]] = f; used[f] = 1; seriesUsed[sk] = (seriesUsed[sk] || 0) + 1;
           });
         }
+        /* Pass 1 — the opportunity's own title leads; the run topic only
+           breaks ties. (The old order multiplied the topic score by 100, so
+           the topic's scenery — for "Seed Gathering", alias-expanded to
+           "forest autumn woodland" — was dealt to nearly every card,
+           whatever the card's own concept said.) */
         var p1 = [];
         run.opportunities.forEach(function (o, oi) {
           EV_LIB.forEach(function (e, idx) {
-            if (topicSc[idx] >= 1.2) p1.push([topicSc[idx] * 100 + titleSc[oi][idx], oi, idx]);
+            if (rawSc[oi][idx][0] >= 1.0 || aliSc[oi][idx][0] >= 1.0 || (topicSc[idx] >= 1.2 && rawSc[oi][idx][0] > 0))
+              p1.push([pairVal(oi, idx), oi, idx]);
           });
         });
-        deal(p1);
+        deal(p1, 2);
         var p2 = [];
         run.opportunities.forEach(function (o, oi) {
           if (res[oi] !== undefined) return;
           EV_LIB.forEach(function (e, idx) {
-            var v = titleSc[oi][idx] + topicSc[idx];
-            if (v >= 0.8) p2.push([v, oi, idx]);
+            var v = pairVal(oi, idx);
+            if (v >= 25) p2.push([v, oi, idx]);
           });
         });
-        deal(p2);
-        /* Last-resort dealing: prefer a neutral, broadly-usable photo. */
+        deal(p2, 3);
+        /* Last resort: best remaining picture by the same title-led score,
+           season gate still on. Only when nothing ungated is left may a
+           gated picture be used, and only when the whole library is
+           exhausted may a picture repeat within the run. */
         run.opportunities.forEach(function (o, oi) {
           if (res[oi] !== undefined) return;
-          var best = null;
-          EV_LIB.forEach(function (e, idx) {
-            if (used[e.f] || (EV_HARD.test(e.t) && !hardQ[oi])) return;
-            if (!best || titleSc[oi][idx] > best[0]) best = [titleSc[oi][idx], e.f];
-          });
-          if (!best) {
+          function pick(ignoreSeason, allowUsed, ignoreHard) {
+            var best = null;
             EV_LIB.forEach(function (e, idx) {
-              if (used[e.f]) return;
-              if (!best || titleSc[oi][idx] > best[0]) best = [titleSc[oi][idx], e.f];
+              if (!allowUsed && used[e.f]) return;
+              if (!ignoreHard && EV_HARD.test(e.t) && !hardQ[oi]) return;
+              if (!ignoreSeason && seasonConflict(oi, idx)) return;
+              var v = pairVal(oi, idx);
+              if (!best || v > best[0] || (v === best[0] && e.f < best[1])) best = [v, e.f];
             });
+            return best;
           }
-          if (!best) {
-            EV_LIB.forEach(function (e, idx) {
-              if (!best || titleSc[oi][idx] > best[0]) best = [titleSc[oi][idx], e.f];
-            });
-          }
-          res[oi] = best[1]; used[best[1]] = 1;
+          var b = pick(false, false, false) || pick(true, false, false) || pick(true, true, true);
+          res[oi] = b[1]; used[b[1]] = 1;
         });
         run.opportunities.forEach(function (o, oi) { o.img = res[oi]; });
       }
@@ -4691,6 +4910,10 @@
          These current models are tried in order — any error moves to the next model,
          and only when all of them fail does the next saved key take over. */
       var GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+      /* Hard cap on a single model attempt: if Gemini has not answered within
+         this time, the attempt is aborted and the chain moves to the next model,
+         so one silent connection can never park a run on a waiting step. */
+      var GEMINI_TIMEOUT_MS = 120000;
       var LS_KEYS = "sri_gemini_keys";
       function getKeys(){
         try {
@@ -4851,7 +5074,17 @@
           '    "format": "Photo" or "Vector" or "Video",',
           '    "demand": integer 0-100, "competition": integer 0-100, "score": integer 0-100,',
           '    "why": "1-2 sentences on why buyers want this now — demand vs fresh supply",',
-          '    "prompts": { "design": ["3 complete design/composition prompts"], "image": ["3 complete image-generation prompts"], "video": ["3 complete video-clip prompts, each with duration and camera movement"] }',
+          '    "prompts": { "design": [3 prompt objects], "image": [3 prompt objects], "video": [3 prompt objects] } — EVERY prompt is a JSON object (never a plain string) with exactly this skeleton:',
+          '    { "prompt": "one detailed prose paragraph describing the finished visual",',
+          '      "style": { "medium": "...", "artistic_style": "...", "aesthetic": "...", "render_or_film": "..." },',
+          '      "subject": { "primary_subject": "...", "secondary_elements": "...", "silhouette_and_proportions": "..." },',
+          '      "composition": { "framing": "...", "camera_angle": "...", "depth_of_field": "...", "focal_length": "...", "rule_of_thirds_or_symmetry": "..." },',
+          '      "lighting_and_color": { "lighting_type": "...", "lighting_direction": "...", "color_palette": ["#RRGGBB", "#RRGGBB", "#RRGGBB", "#RRGGBB"], "contrast_and_tonality": "..." },',
+          '      "typography": { "has_text": false, "exact_text": "", "font_style": "" },',
+          '      "negative_prompt": "comma-separated list of things to exclude, always including brand logos, trademarks, watermarks and copyrighted characters",',
+          '      "technical": { "aspect_ratio": "16:9", "midjourney_flags": "--ar 16:9 --style raw --v 6", "sdxl_flux_guidance": { "cfg_scale": 7, "steps": 30, "sampler": "DPM++ 2M Karras" } },',
+          '      "metadata": { "title": "short asset title", "description": "1-2 sentences", "tags": ["8-12 search tags"], "category": "..." } }',
+          '    Adapt the skeleton per type: DESIGN prompts use illustration / vector / graphic-design mediums and their typography block is a working design element (generic placeholder headline text only — never a brand name). IMAGE prompts are photographic (medium: digital photograph, real camera and lens language). VIDEO prompts put the motion in the prose and in composition (subject movement and camera movement), and their technical block is { "aspect_ratio": "16:9", "duration_seconds": 8, "fps": 24, "camera_movement": "...", "motion_guidance": "..." } instead of the still-image guidance. Each of the 3 prompts of a type is a different treatment of the concept.',
           "  } ]",
           "}",
           "Rules: exactly " + count + " opportunities sorted by score descending, scores varying realistically; respect the content mix (for example if it says Photos only, every format is Photo); titles are concrete scenes a creator can shoot or generate; every prompt is finished and ready to paste into design, image and video tools; demand reflects buyer search interest, competition reflects how much fresh supply already exists.",
@@ -4865,9 +5098,13 @@
         return lines.join("\n");
       }
       function callGemini(key, model, promptText){
+        var ctrl = ("AbortController" in window) ? new AbortController() : null;
+        var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, GEMINI_TIMEOUT_MS);
+        function settled(){ clearTimeout(timer); }
         return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          signal: ctrl ? ctrl.signal : undefined,
           body: JSON.stringify({
             contents: [{ parts: [{ text: promptText }] }],
             generationConfig: { responseMimeType: "application/json", temperature: 0.75, maxOutputTokens: 65536 }
@@ -4889,6 +5126,10 @@
             var tok = (typeof um.totalTokenCount === "number") ? um.totalTokenCount : ((um.promptTokenCount || 0) + (um.candidatesTokenCount || 0));
             try { return { json: JSON.parse(out), tokens: tok }; } catch (e) { throw new Error("gemini-parse"); }
           });
+        }).then(function(r){ settled(); return r; }, function(err){
+          settled();
+          if (err && err.name === "AbortError"){ var te = new Error("gemini-timeout"); te.timedOut = true; throw te; }
+          throw err;
         });
       }
       function clampScore(v, dflt){ v = parseInt(v, 10); if (isNaN(v)) return dflt; return Math.max(0, Math.min(100, v)); }
@@ -4908,8 +5149,8 @@
             String(o.why || "Buyer demand for this concept is trending up, with manageable fresh supply.")
           );
           var pr = o.prompts || {};
-          var d = strArr(pr.design), im = strArr(pr.image), v = strArr(pr.video);
-          if (d.length >= 3 && im.length >= 3 && v.length >= 3) opp.prompts = { design: d.slice(0, 3), image: im.slice(0, 3), video: v.slice(0, 3) };
+          var d = normPrompts("design", pr.design, topic, opp), im = normPrompts("image", pr.image, topic, opp), v = normPrompts("video", pr.video, topic, opp);
+          if (d.length >= 3 && im.length >= 3 && v.length >= 3) opp.prompts = { design: d, image: im, video: v };
           return opp;
         });
         opps.sort(function(a, b){ return b.score - a.score; });
@@ -4933,6 +5174,7 @@
         return run;
       }
       function friendlyGeminiError(err){
+        if (err && err.timedOut) return "Gemini took too long to answer — every model we tried went past the time limit. Nothing is wrong with your key; please run the research again.";
         if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in Settings and it will be used automatically.";
         if (err && /location is not supported|not supported in your|user location/i.test(err.gmsg || "")) return "Google says the Gemini API is not available from your current location, so the key could not run. The exact reply from Google is in the run log above.";
         if (err && err.status === 404) return "Google could not serve any Gemini model for your key (HTTP 404). The exact reply from Google is in the run log above — if it keeps happening, create a fresh key in AI Studio and add it in Settings.";
@@ -4969,21 +5211,35 @@
           div.textContent = "-> " + text;
           logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
         }
-        var stepIdx = 0, animTimer = null;
+        var stepIdx = 0, animTimer = null, waitTimer = null, waitSecs = 0;
+        /* The wait for Gemini's answer belongs to the generation step ("Writing
+           prompts") — everything after it (quality checks, matching a picture to
+           every opportunity, opening the brief) runs locally in this page and
+           finishes in well under a second once the answer is back. So the
+           animation parks on the generation step, never on "Finishing up":
+           that step can no longer sit at "waiting" while the model is still
+           writing, and the elapsed clock shows the wait is the model's, not a hang. */
+        var PARK_AT = LIVE_STEPS.length - 3;
+        function startWaitClock(){
+          var parked = stepEls[PARK_AT];
+          parked.querySelector(".st").textContent = "waiting";
+          logLine("Gemini is writing the full brief and all the prompts — the longest part of a run");
+          waitTimer = setInterval(function(){
+            waitSecs += 5;
+            if (parked.classList.contains("run")) parked.querySelector(".st").textContent = "waiting · " + waitSecs + "s";
+            if (waitSecs === 30) logLine("still writing — one answer carries the brief plus " + (want * 9) + " prompts, so this step normally takes a while");
+          }, 5000);
+        }
+        function stopWaitClock(){ if (waitTimer){ clearInterval(waitTimer); waitTimer = null; } }
         function advance(){
+          if (stepIdx > PARK_AT){
+            if (!waitTimer) startWaitClock();
+            return;
+          }
           if (stepIdx > 0){
             var p = stepEls[stepIdx - 1];
             p.classList.remove("run"); p.classList.add("done");
             p.querySelector(".ic").textContent = "✓"; p.querySelector(".st").textContent = "done";
-          }
-          if (stepIdx >= LIVE_STEPS.length - 1){
-            var last = stepEls[LIVE_STEPS.length - 1];
-            if (!last.classList.contains("done")){
-              last.classList.add("run");
-              last.querySelector(".ic").innerHTML = '<span class="spin"></span>';
-              last.querySelector(".st").textContent = "waiting";
-            }
-            return;
           }
           var st = stepEls[stepIdx];
           st.classList.add("run");
@@ -4998,6 +5254,7 @@
         advance();
         function stopAnim(){
           if (animTimer) clearTimeout(animTimer);
+          stopWaitClock();
           for (var i = 0; i < stepEls.length; i++){
             stepEls[i].classList.remove("run"); stepEls[i].classList.add("done");
             stepEls[i].querySelector(".ic").textContent = "✓"; stepEls[i].querySelector(".st").textContent = "done";
@@ -5012,6 +5269,7 @@
         var lastErr = null, usedKey = 0, usedModel = "";
         function errDetail(err){
           if (!err) return "";
+          if (err.timedOut) return "no answer within " + Math.round(GEMINI_TIMEOUT_MS / 1000) + "s — attempt timed out";
           var d = err.status ? "HTTP " + err.status : "";
           if (err.gmsg) d += (d ? " — " : "") + err.gmsg;
           else if (!err.status && err.message && !/^gemini-/.test(err.message)) d = err.message;
@@ -5049,6 +5307,7 @@
           setTimeout(function(){ openRun(run); toast("Run " + run.id + " complete — fresh from Gemini (Key " + usedKey + ")"); }, 450);
         }).catch(function(err){
           if (animTimer) clearTimeout(animTimer);
+          stopWaitClock();
           var cur = stepsEl.querySelector(".step.run");
           for (var i = 0; i < stepEls.length; i++){ if (stepEls[i] !== cur) stepEls[i].classList.remove("run"); }
           if (cur){ cur.classList.add("fail"); cur.querySelector(".ic").textContent = "!"; cur.querySelector(".st").textContent = "stopped"; }
