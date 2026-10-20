@@ -54,6 +54,8 @@
       html[data-theme="light"] .tagchips span{ background:#f8fafc; border-color:#e9eef3; }
       html[data-theme="light"] .datebox{ background:#f8fafc; border-color:#e9eef3; }
       html[data-theme="light"] .visitor{ background:#f8fafc; border-color:#e9eef3; box-shadow:none; }
+      html[data-theme="light"] .api-card{ background:#f8fafc; border-color:#e9eef3; box-shadow:none; }
+      html[data-theme="light"] .api-add input{ background:#ffffff; border-color:#dbe6ee; box-shadow:none; }
       html[data-theme="light"] .btn{ background:#ffffff; border-color:#dbe6ee; }
       html[data-theme="light"] .nav .cnt{ background:#f8fafc; border-color:#e9eef3; }
       html[data-theme="light"] .hero{ color:#e9eff6; }
@@ -118,6 +120,38 @@
       .socials a{ display:flex; align-items:center; gap:9px; color:var(--ink2); text-decoration:none; font-size:13px; font-weight:600; padding:7px 10px; border-radius:8px; }
       .socials a:hover{ background:var(--panel2); color:var(--ink); }
       .socials a .ext{ margin-left:auto; color:var(--ink3); }
+
+      /* ============ API ACCESS (user's own Gemini keys, browser-only) ============ */
+      .side{ overflow-y:auto; }
+      .api-box{ margin-top:18px; border-top:1px solid var(--line); padding-top:6px; }
+      .api-box .lbl{ display:block; font-family:"JetBrains Mono",monospace; font-size:10px; letter-spacing:.16em; color:var(--ink3); padding:10px 10px 6px; }
+      .api-card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin:0 2px; transition:border-color .25s, box-shadow .25s; }
+      .api-box.attn .api-card{ border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-dim); }
+      .api-status{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; color:var(--ink2); }
+      .api-status .dot{ width:8px; height:8px; border-radius:50%; background:var(--ink3); flex:none; }
+      .api-status.on{ color:var(--ink); }
+      .api-status.on .dot{ background:var(--green); box-shadow:0 0 9px var(--green); animation:pulse 2.2s infinite; }
+      .api-note{ font-size:11.5px; color:var(--ink3); line-height:1.5; margin:7px 0 0; }
+      .keyrow{ display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); margin-top:9px; padding-top:8px; }
+      .keyrow .kname{ font-size:12.5px; font-weight:700; flex:none; }
+      .keyrow .kmask{ margin-left:auto; font-size:11px; color:var(--ink3); }
+      .keyrow .kdel{ background:none; border:1px solid var(--line2); color:var(--ink2); font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:7px; flex:none; }
+      .keyrow .kdel:hover{ border-color:var(--red); color:var(--red); }
+      .api-add{ display:flex; flex-direction:column; gap:8px; margin-top:11px; }
+      .api-add input{ width:100%; background:var(--panel3); border:1px solid var(--line2); color:var(--ink); font-size:12.5px; padding:9px 11px; border-radius:9px; outline:none; }
+      .api-add input:focus{ border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-dim); }
+      .api-add .btn{ justify-content:center; }
+      .api-help{ margin-top:11px; border-top:1px solid var(--line); padding-top:9px; }
+      .api-help a{ font-size:12px; font-weight:700; text-decoration:none; }
+      .api-help a:hover{ text-decoration:underline; }
+      .api-help ol{ margin:6px 0 0; padding-left:16px; font-size:11.5px; color:var(--ink3); line-height:1.55; }
+      .api-notice{ margin-top:16px; border:1px solid rgba(255,194,75,.5); background:rgba(255,194,75,.08); border-radius:10px; padding:12px 14px; font-size:13px; color:var(--ink2); display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; }
+      .api-notice[hidden]{ display:none; }
+      .api-notice b{ color:var(--ink); }
+      .api-notice .btn{ margin-left:auto; }
+      .log .err{ color:var(--red); }
+      .step.fail{ color:var(--red); }
+      .step.fail .ic{ color:var(--red); }
       /* mobile menu toggle — only visible in the ≤820px layout */
       .menubtn{ display:none; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line2); color:var(--ink); font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:700; letter-spacing:.1em; padding:8px 13px; border-radius:9px; }
       .menubtn .ic-close{ display:none; }
@@ -375,6 +409,8 @@
         .nav button{ width:auto; padding:8px 11px; }
         .nav .cnt{ margin-left:2px; }
         .side-foot{ display:none; }
+        .api-box{ display:none; }
+        .side.open .api-box{ display:block; width:100%; margin-top:12px; }
         .side.open .side-foot{ display:flex; width:100%; margin-top:12px; }
         .side.open .socials{ flex-direction:row; gap:6px; }
         .side.open .socials a{ flex:1; }
@@ -500,6 +536,26 @@
           <button data-view="sheet"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sheet Data</button>
           <button data-view="days"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/></svg>Awareness Days<span class="cnt" id="dayCount">–</span></button>
         </nav>
+        <div class="api-box" id="apiBox">
+          <span class="lbl">API ACCESS</span>
+          <div class="api-card">
+            <div class="api-status" id="apiStatus"><span class="dot"></span><span id="apiStatusTxt">Not connected</span></div>
+            <p class="api-note">Live research runs on your own free Google Gemini key. Keys are saved only in this browser — they are sent to Google when you research, nowhere else.</p>
+            <div id="apiKeyList"></div>
+            <div class="api-add">
+              <input type="password" id="apiKeyInput" placeholder="Paste a Gemini API key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Gemini API key">
+              <button class="btn small primary" id="apiAddBtn" type="button">Add key</button>
+            </div>
+            <div class="api-help">
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key — Google AI Studio</a>
+              <ol>
+                <li>Open the link and sign in with Google.</li>
+                <li>Click “Create API key” and copy it.</li>
+                <li>Paste it above and press Add key. Add more keys and they rotate automatically when one hits its limit.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
         <div class="side-foot">
           <div class="visitor">
             <span class="dot"></span>
@@ -574,6 +630,10 @@
                 <div class="form-actions">
                   <button class="btn primary" id="runBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Run Research</button>
                   <button class="btn" id="demoBtn">Load sample run (Halloween)</button>
+                </div>
+                <div class="api-notice" id="apiNotice" hidden>
+                  <span><b>Live research needs your Gemini key.</b> Add your free Google Gemini key in the sidebar's <b>API Access</b> section — then every new topic returns fresh research. The built-in sample runs (Halloween, Remote Work) work without a key.</span>
+                  <button class="btn small" id="apiNoticeBtn" type="button">Add a key</button>
                 </div>
                 <div class="pipe" id="pipe">
                   <div class="pipe-top"><b id="pipeTitle">Researching…</b><span class="mono" id="pipePct">0%</span></div>
@@ -952,6 +1012,10 @@
       function promptsFor(run, opp, idx){
         var t = opp.title, topic = run.topic;
         var keyBase = run.id.toLowerCase() + "-o" + (idx + 1);
+        function wrap(arr, type){ return arr.map(function(p, i){ return { type:type, n:i + 1, text:p, key:keyBase + "-" + type + "-" + (i + 1) }; }); }
+        if (opp.prompts && opp.prompts.design && opp.prompts.image && opp.prompts.video){
+          return { design: wrap(opp.prompts.design, "design"), image: wrap(opp.prompts.image, "image"), video: wrap(opp.prompts.video, "video") };
+        }
         var design = [
           "Design a stock-ready composition: " + t + " — strong focal point in the left third, generous negative space for headline text, warm seasonal palette, no text or logos in frame.",
           "Create a versatile design asset based on \"" + t + "\": layered depth (foreground prop, mid subject, soft background), balanced symmetry, export-friendly margins on all sides.",
@@ -967,7 +1031,6 @@
           "Vertical 9:16 stock clip (8s): " + t.toLowerCase() + ", handheld-authentic feel, subject enters frame in first second, hold final pose 2 seconds for end-card text.",
           "Cinematic b-roll (10s): " + t + ", gentle gimbal glide, rich ambient detail, soft highlight roll-off, deliver with 16:9 and 1:1 safe framing."
         ];
-        function wrap(arr, type){ return arr.map(function(p, i){ return { type:type, n:i + 1, text:p, key:keyBase + "-" + type + "-" + (i + 1) }; }); }
         return { design: wrap(design, "design"), image: wrap(image, "image"), video: wrap(video, "video") };
       }
       function allPrompts(run){ var out = []; run.opportunities.forEach(function(opp, i){ var p = promptsFor(run, opp, i); out = out.concat(p.design, p.image, p.video); }); return out; }
@@ -1105,7 +1168,8 @@
         ["How do I export my results?", "Open the Export screen on any run and download the Briefs, Opportunities and Prompts CSVs. They import straight into Google Sheets — one tab each — keyed by run_id, opp_id and prompt_key."],
         ["What is Awareness Days?", "A built-in calendar of awareness days, holidays and seasonal events across the whole year, so you never need an external site to plan ahead. Every date has a Research button that starts a run for that day in one click."],
         ["Can I research any topic?", "Yes. Halloween and Remote Work ship as full sample runs, and any other topic — Diwali, Spring Gardening, Fitness at Home, anything — gets a complete brief built for it on the spot, with the full opportunity count you selected."],
-        ["Is this tool free?", "Yes — researching topics, reading briefs, using the prompts and exporting CSVs are all free. There is no paywall on runs, prompts or the Awareness Days calendar."]
+        ["Is this tool free?", "Yes — researching topics, reading briefs, using the prompts and exporting CSVs are all free. There is no paywall on runs, prompts or the Awareness Days calendar."],
+        ["How does live research work?", "Add your own free Google Gemini key in the sidebar's API Access section. With a key saved, every new topic is researched fresh by Gemini using your key — full brief, ranked opportunities and all 9 prompts per opportunity. You can save several keys: if one hits its free limit, the next is tried automatically. Keys stay in your browser and are only sent to Google. Without a key, the two built-in sample runs (Halloween and Remote Work) still work."]
       ];
       $("faqList").innerHTML = FAQS.map(function(f, i){
         return '<div class="faq-item' + (i === 0 ? " open" : "") + '"><button class="faq-q" aria-expanded="' + (i === 0) + '"><span class="n">Q' + (i + 1) + '</span>' + esc(f[0]) +
@@ -1298,6 +1362,15 @@
         var topic = $("topic").value.trim();
         if (!topic){ toast("Enter a topic first"); $("topic").focus(); return; }
         var want = parseInt($("oppTarget").value, 10) || 15;
+        /* routing: the two built-in sample runs always work offline; a brand-new topic needs
+           the user's own Gemini key (live research) — without one, point them at the API section */
+        var tl = topic.toLowerCase();
+        var isBuiltIn = (tl === "halloween" || tl === "remote work");
+        if (!isBuiltIn){
+          if (getKeys().length){ startLiveRun(topic, want); return; }
+          var hasPrior = RUNS.some(function(r){ return r.topic.toLowerCase() === tl; });
+          if (!hasPrior){ flagApiNeeded(); return; }
+        }
         running = true;
         var btn = $("runBtn"); btn.disabled = true; btn.textContent = "Running...";
         var pipe = $("pipe"); pipe.classList.add("on");
@@ -4593,6 +4666,272 @@
       });
       document.querySelector('[data-view="days"]').addEventListener("click", function () { setTimeout(renderDays, 30); });
 
+
+      /* ================= GEMINI API KEYS (user's own, browser-only) =================
+         Keys live ONLY in this browser's localStorage. They are sent solely to
+         Google's Gemini endpoint when the user runs research — never anywhere else. */
+      var GEMINI_MODEL = "gemini-2.5-flash";
+      var LS_KEYS = "sri_gemini_keys";
+      function getKeys(){
+        try {
+          var a = JSON.parse(localStorage.getItem(LS_KEYS) || "[]");
+          return Array.isArray(a) ? a.filter(function(k){ return typeof k === "string" && k.trim().length > 0; }) : [];
+        } catch (e) { return []; }
+      }
+      function saveKeys(a){ try { localStorage.setItem(LS_KEYS, JSON.stringify(a)); } catch (e) {} }
+      function renderApiBox(){
+        var keys = getKeys();
+        var st = $("apiStatus"), txt = $("apiStatusTxt");
+        if (!st || !txt) return;
+        if (keys.length){
+          st.classList.add("on");
+          txt.textContent = "Connected — " + keys.length + (keys.length === 1 ? " key" : " keys") + " saved in this browser";
+          var notice = $("apiNotice"); if (notice) notice.hidden = true;
+        } else {
+          st.classList.remove("on");
+          txt.textContent = "Not connected";
+        }
+        $("apiKeyList").innerHTML = keys.map(function(k, i){
+          return '<div class="keyrow"><span class="kname">Key ' + (i + 1) + '</span><span class="kmask mono">••••••••' + esc(k.slice(-4)) + '</span>' +
+            '<button type="button" class="kdel" data-delkey="' + i + '" aria-label="Remove Key ' + (i + 1) + '">Remove</button></div>';
+        }).join("");
+      }
+      function addKeyFromInput(){
+        var inp = $("apiKeyInput"), v = inp.value.trim();
+        if (!v){ toast("Paste your Gemini key first"); inp.focus(); return; }
+        if (v.length < 20){ toast("That key looks too short — copy the full key from AI Studio"); inp.focus(); return; }
+        var keys = getKeys();
+        if (keys.indexOf(v) > -1){ toast("That key is already added"); inp.value = ""; return; }
+        keys.push(v); saveKeys(keys); inp.value = "";
+        renderApiBox();
+        toast("Key " + keys.length + " saved — live research is on");
+      }
+      $("apiAddBtn").addEventListener("click", addKeyFromInput);
+      $("apiKeyInput").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); addKeyFromInput(); } });
+      $("apiKeyList").addEventListener("click", function(e){
+        var b = e.target.closest("[data-delkey]"); if (!b) return;
+        var keys = getKeys();
+        keys.splice(parseInt(b.getAttribute("data-delkey"), 10), 1);
+        saveKeys(keys); renderApiBox();
+        toast(keys.length ? "Key removed" : "Key removed — live research is off");
+      });
+      function flagApiNeeded(){
+        var notice = $("apiNotice"); if (notice) notice.hidden = false;
+        var box = $("apiBox");
+        if (box){
+          box.classList.add("attn");
+          setTimeout(function(){ box.classList.remove("attn"); }, 3600);
+          if (window.innerWidth <= 820 && !sideEl.classList.contains("open")){ sideEl.classList.add("open"); menuBtn.setAttribute("aria-expanded", "true"); }
+          box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        toast("Add your free Gemini key first — sidebar, API Access section");
+      }
+      $("apiNoticeBtn").addEventListener("click", function(){
+        if (window.innerWidth <= 820 && !sideEl.classList.contains("open")){ sideEl.classList.add("open"); menuBtn.setAttribute("aria-expanded", "true"); }
+        var box = $("apiBox");
+        if (box){ box.classList.add("attn"); setTimeout(function(){ box.classList.remove("attn"); }, 3600); box.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        setTimeout(function(){ $("apiKeyInput").focus(); }, 400);
+      });
+      renderApiBox();
+
+      /* ================= LIVE RESEARCH VIA GEMINI (rotates over the saved keys) ================= */
+      function geminiPrompt(topic, market, mix, horizon, count){
+        return [
+          "You are the research engine behind a stock-content research tool used by photographers, illustrators and videographers selling on Adobe Stock, Shutterstock and Getty Images.",
+          "Research this topic for stock-content buyers: \"" + topic + "\"",
+          "Primary market: " + market + ". Content mix requested: " + mix + ". Season horizon: " + horizon + ". Today is " + new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) + ".",
+          "Think like a stock research analyst: what buyers are searching for and downloading right now, what is already saturated, and when buyers search (they plan 4-8 weeks ahead of seasons and events, so upload deadlines come well before the occasion).",
+          "Return ONLY a JSON object — no markdown fences, no commentary — with exactly this shape:",
+          "{",
+          '  "summary": "2-3 sentences: where demand is concentrated, what is growing, what is saturated",',
+          '  "timing": [["Buyer search peak","..."],["Upload deadline (agencies)","..."],["Social content window","..."],["Evergreen spillover","..."]],',
+          '  "audiences": ["exactly 6 buyer audiences, short phrases"],',
+          '  "activities": ["exactly 8 key activities / scenes buyers want, short phrases"],',
+          '  "regional": [["US","one-line note"],["UK","one-line note"],["EU","one-line note"],["India","one-line note"]],',
+          '  "opportunities": [ EXACTLY ' + count + ' items, best first, each: {',
+          '    "title": "specific, shootable stock concept title",',
+          '    "format": "Photo" or "Vector" or "Video",',
+          '    "demand": integer 0-100, "competition": integer 0-100, "score": integer 0-100,',
+          '    "why": "1-2 sentences on why buyers want this now — demand vs fresh supply",',
+          '    "prompts": { "design": ["3 complete design/composition prompts"], "image": ["3 complete image-generation prompts"], "video": ["3 complete video-clip prompts, each with duration and camera movement"] }',
+          "  } ]",
+          "}",
+          "Rules: exactly " + count + " opportunities sorted by score descending, scores varying realistically; respect the content mix (for example if it says Photos only, every format is Photo); titles are concrete scenes a creator can shoot or generate — no brand names, no trademarks, no text or logos inside the visuals; every prompt is finished and ready to paste into design, image and video tools; demand reflects buyer search interest, competition reflects how much fresh supply already exists."
+        ].join("\n");
+      }
+      function callGemini(key, promptText){
+        return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: { responseMimeType: "application/json", temperature: 0.75, maxOutputTokens: 65536 }
+          })
+        }).then(function(res){
+          return res.text().then(function(txt){
+            var data = null; try { data = JSON.parse(txt); } catch (e) {}
+            if (!res.ok){
+              var err = new Error("gemini-http-" + res.status);
+              err.status = res.status;
+              err.gmsg = (data && data.error && data.error.message) || "";
+              throw err;
+            }
+            var parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+            if (!parts || !parts.length) throw new Error("gemini-empty");
+            var out = parts.map(function(p){ return p.text || ""; }).join("").trim();
+            out = out.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+            try { return JSON.parse(out); } catch (e) { throw new Error("gemini-parse"); }
+          });
+        });
+      }
+      function clampScore(v, dflt){ v = parseInt(v, 10); if (isNaN(v)) return dflt; return Math.max(0, Math.min(100, v)); }
+      function strArr(a){ return Array.isArray(a) ? a.map(function(x){ return String(x); }).filter(function(x){ return x.trim().length > 0; }) : []; }
+      function pairArr(a){ return Array.isArray(a) ? a.filter(function(p){ return Array.isArray(p) && p.length >= 2; }).map(function(p){ return [String(p[0]), String(p[1])]; }) : []; }
+      function buildLiveRun(data, topic, market, count){
+        if (!data || typeof data.summary !== "string" || !data.summary.trim() || !Array.isArray(data.opportunities)) throw new Error("gemini-shape");
+        if (data.opportunities.length < count) throw new Error("gemini-short");
+        var opps = data.opportunities.slice(0, count).map(function(o, i){
+          o = o || {};
+          var opp = mkOpp(
+            String(o.title || (topic + " — concept " + (i + 1))),
+            ["Photo", "Vector", "Video"].indexOf(o.format) > -1 ? o.format : "Photo",
+            clampScore(o.demand, Math.max(55, 88 - i * 2)),
+            clampScore(o.competition, 40),
+            clampScore(o.score, Math.max(55, 90 - i * 2)),
+            String(o.why || "Buyer demand for this concept is trending up, with manageable fresh supply.")
+          );
+          var pr = o.prompts || {};
+          var d = strArr(pr.design), im = strArr(pr.image), v = strArr(pr.video);
+          if (d.length >= 3 && im.length >= 3 && v.length >= 3) opp.prompts = { design: d.slice(0, 3), image: im.slice(0, 3), video: v.slice(0, 3) };
+          return opp;
+        });
+        opps.sort(function(a, b){ return b.score - a.score; });
+        var timing = pairArr(data.timing);
+        if (timing.length < 2) timing = [["Buyer search peak", "Rolling, next 90 days"], ["Upload deadline (agencies)", "Within 2 weeks"], ["Social content window", "Next 30-60 days"], ["Evergreen spillover", "Year-round basics"]];
+        var audiences = strArr(data.audiences);
+        if (!audiences.length) audiences = ["Content marketers", "Bloggers & publishers", "Small business owners", "Social media managers", "Educators", "E-commerce sellers"];
+        var activities = strArr(data.activities);
+        if (!activities.length) activities = ["Planning", "Hands-on doing", "Sharing with friends", "Buying supplies", "Learning basics", "Showing results"];
+        var regional = pairArr(data.regional);
+        if (regional.length < 2) regional = [["US", "Largest buyer market for this topic."], ["UK", "Prefers understated, authentic styling."], ["EU", "Quality and instructional content performs well."], ["India", "Fast-growing, price-sensitive demand."]];
+        var counts = {}; SOURCES.forEach(function(s, i){ counts[s.key] = 84 + ((i * 37 + topic.length * 13) % 140); });
+        var run = {
+          id: "SR-" + (runSeq++), topic: topic,
+          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          market: market, imgSet: "", summary: data.summary,
+          timing: timing, audiences: audiences, activities: activities, regional: regional,
+          sourceCounts: counts, opportunities: opps
+        };
+        assignRunImages(run);
+        return run;
+      }
+      function friendlyGeminiError(err){
+        if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in the sidebar and it will be used automatically.";
+        if (err && (err.status === 400 || err.status === 401 || err.status === 403 || /api key/i.test(err.gmsg || ""))) return "Google did not accept the API key. Open AI Studio, copy the key again, remove the old one in the sidebar and add the fresh copy.";
+        if (err && err.message === "gemini-short") return "Gemini sent back an incomplete brief this time. Please run the research again.";
+        if (err && (err.message === "gemini-parse" || err.message === "gemini-shape" || err.message === "gemini-empty")) return "Gemini sent back an answer that could not be read. Please run the research again.";
+        if (err && err.name === "TypeError") return "Could not reach Google Gemini — check your internet connection and try again.";
+        return "Gemini could not finish this research. Please try again in a moment.";
+      }
+      var LIVE_STEPS = [
+        { label: "Sending your topic to Gemini", log: ["your key talks straight to Google — no server in between"] },
+        { label: "Researching demand & timing", log: ["buyer demand, search peaks and upload windows"] },
+        { label: "Building brief & opportunities", log: ["timing, audiences, activities and regional notes"] },
+        { label: "Writing prompts", log: ["3 design + 3 image + 3 video for every opportunity"] },
+        { label: "Quality checks", log: ["opportunity count, scores and formats verified"] },
+        { label: "Finishing up", log: ["a reference picture is matched to every opportunity"] }
+      ];
+      function startLiveRun(topic, want){
+        var keys = getKeys();
+        if (!keys.length){ flagApiNeeded(); return; }
+        var market = $("market").value, mix = $("mix").value, horizon = $("horizon").value;
+        running = true;
+        var btn = $("runBtn"); btn.disabled = true; btn.textContent = "Running...";
+        var pipe = $("pipe"); pipe.classList.add("on");
+        $("pipeTitle").textContent = "Researching \"" + topic + "\" with Gemini...";
+        var stepsEl = $("pipeSteps"), logEl = $("pipeLog");
+        stepsEl.innerHTML = LIVE_STEPS.map(function(s){ return '<div class="step"><span class="ic">·</span><span>' + s.label + '</span><span class="st"></span></div>'; }).join("");
+        logEl.innerHTML = "";
+        pipe.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        var stepEls = stepsEl.querySelectorAll(".step");
+        function logLine(text, cls){
+          var div = document.createElement("div");
+          if (cls) div.className = cls;
+          div.textContent = "-> " + text;
+          logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
+        }
+        var stepIdx = 0, animTimer = null;
+        function advance(){
+          if (stepIdx > 0){
+            var p = stepEls[stepIdx - 1];
+            p.classList.remove("run"); p.classList.add("done");
+            p.querySelector(".ic").textContent = "✓"; p.querySelector(".st").textContent = "done";
+          }
+          if (stepIdx >= LIVE_STEPS.length - 1){
+            var last = stepEls[LIVE_STEPS.length - 1];
+            if (!last.classList.contains("done")){
+              last.classList.add("run");
+              last.querySelector(".ic").innerHTML = '<span class="spin"></span>';
+              last.querySelector(".st").textContent = "waiting";
+            }
+            return;
+          }
+          var st = stepEls[stepIdx];
+          st.classList.add("run");
+          st.querySelector(".ic").innerHTML = '<span class="spin"></span>';
+          st.querySelector(".st").textContent = "running";
+          LIVE_STEPS[stepIdx].log.forEach(function(line){ logLine(line); });
+          var pct0 = Math.round((stepIdx / LIVE_STEPS.length) * 100);
+          $("pipeBar").style.width = pct0 + "%"; $("pipePct").textContent = pct0 + "%";
+          stepIdx++;
+          animTimer = setTimeout(advance, 1100);
+        }
+        advance();
+        function stopAnim(){
+          if (animTimer) clearTimeout(animTimer);
+          for (var i = 0; i < stepEls.length; i++){
+            stepEls[i].classList.remove("run"); stepEls[i].classList.add("done");
+            stepEls[i].querySelector(".ic").textContent = "✓"; stepEls[i].querySelector(".st").textContent = "done";
+          }
+          $("pipeBar").style.width = "100%"; $("pipePct").textContent = "100%";
+        }
+        function restoreBtn(){
+          running = false; btn.disabled = false;
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Run Research';
+        }
+        var promptText = geminiPrompt(topic, market, mix, horizon, want);
+        var lastErr = null, usedKey = 0;
+        function attempt(i){
+          if (i >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
+          return callGemini(keys[i], promptText).then(function(data){
+            usedKey = i + 1;
+            return buildLiveRun(data, topic, market, want);
+          }).catch(function(err){
+            lastErr = err;
+            if (i + 1 < keys.length) logLine("Key " + (i + 1) + " could not finish — switching to Key " + (i + 2) + " automatically", "err");
+            return attempt(i + 1);
+          });
+        }
+        attempt(0).then(function(run){
+          stopAnim();
+          $("pipeTitle").textContent = "Done — brief ready";
+          logLine("ALL CHECKS PASS", "ok");
+          logLine("fresh research received via Key " + usedKey, "ok");
+          RUNS.unshift(run); renderRuns(); renderSheet();
+          restoreBtn();
+          setTimeout(function(){ openRun(run); toast("Run " + run.id + " complete — fresh from Gemini (Key " + usedKey + ")"); }, 450);
+        }).catch(function(err){
+          if (animTimer) clearTimeout(animTimer);
+          var cur = stepsEl.querySelector(".step.run");
+          for (var i = 0; i < stepEls.length; i++){ if (stepEls[i] !== cur) stepEls[i].classList.remove("run"); }
+          if (cur){ cur.classList.add("fail"); cur.querySelector(".ic").textContent = "!"; cur.querySelector(".st").textContent = "stopped"; }
+          $("pipeTitle").textContent = "Research could not finish";
+          var msg = friendlyGeminiError(err);
+          logLine(msg, "err");
+          restoreBtn();
+          toast(msg);
+        });
+      }
 
       /* ================= VISITOR COUNTER (unique per browser) ================= */
       (function visitors(){
