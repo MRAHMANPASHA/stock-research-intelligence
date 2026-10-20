@@ -137,6 +137,12 @@
       .keyrow .kmask{ margin-left:auto; font-size:11px; color:var(--ink3); }
       .keyrow .kdel{ background:none; border:1px solid var(--line2); color:var(--ink2); font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:7px; flex:none; }
       .keyrow .kdel:hover{ border-color:var(--red); color:var(--red); }
+      .keyrow{ flex-wrap:wrap; }
+      .keyrow .kstats{ flex-basis:100%; font-size:11px; color:var(--ink3); line-height:1.45; }
+      .keyrow .kstats .kquota{ color:var(--amber); font-weight:700; }
+      .api-totals{ display:flex; flex-wrap:wrap; align-items:baseline; gap:5px 18px; background:var(--panel3); border:1px solid var(--line); border-radius:9px; padding:9px 12px 10px; margin-top:10px; font-size:12px; color:var(--ink2); }
+      .api-totals .tlab{ flex-basis:100%; font-family:"JetBrains Mono",monospace; font-size:9.5px; letter-spacing:.16em; color:var(--ink3); }
+      .api-totals b{ font-family:"JetBrains Mono",monospace; font-size:13.5px; color:var(--ink); }
       .api-add{ display:flex; flex-direction:column; gap:8px; margin-top:11px; }
       .api-add input{ width:100%; background:var(--panel3); border:1px solid var(--line2); color:var(--ink); font-size:12.5px; padding:9px 11px; border-radius:9px; outline:none; }
       .api-add input:focus{ border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-dim); }
@@ -904,6 +910,8 @@
                 <div class="api-card">
                   <div class="api-status" id="apiStatus"><span class="dot"></span><span id="apiStatusTxt">Not connected</span></div>
                   <p class="api-note">Live research runs on your own free Google Gemini key. Keys are saved only in this browser — they are sent to Google when you research, nowhere else.</p>
+                  <div class="api-totals" id="apiTotals"></div>
+                  <p class="api-note">Google doesn't reveal your account's real remaining balance to any website — the counts here track only the research run in this browser.</p>
                   <div id="apiKeyList"></div>
                   <div class="api-add">
                     <input type="password" id="apiKeyInput" placeholder="Paste a Gemini API key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Gemini API key">
@@ -4691,6 +4699,50 @@
         } catch (e) { return []; }
       }
       function saveKeys(a){ try { localStorage.setItem(LS_KEYS, JSON.stringify(a)); } catch (e) {} }
+      /* ================= PER-KEY USAGE TRACKER (this browser only) =================
+         Google never reports a key's real remaining balance to any website, so the
+         counts shown are an honest local tally: successful runs credited to the exact
+         key+model that answered, tokens taken from Gemini's own usageMetadata on
+         each reply, last-used time, and a marker when a key last hit its limit (429).
+         Records are keyed by a one-way hash of the key — the key itself is never
+         duplicated into the usage store. Removing a key removes its record too. */
+      var LS_USAGE = "sri_gemini_usage";
+      function keyHash(k){
+        var h = 5381;
+        for (var i = 0; i < k.length; i++){ h = ((h << 5) + h + k.charCodeAt(i)) | 0; }
+        return "k" + (h >>> 0).toString(36);
+      }
+      function getUsage(){
+        try {
+          var o = JSON.parse(localStorage.getItem(LS_USAGE) || "{}");
+          return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+        } catch (e) { return {}; }
+      }
+      function saveUsage(o){ try { localStorage.setItem(LS_USAGE, JSON.stringify(o)); } catch (e) {} }
+      function fmtNum(n){ return (n || 0).toLocaleString("en-US"); }
+      function relTime(ts){
+        if (!ts) return "never";
+        var s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+        if (s < 60) return "just now";
+        var m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+        var h = Math.floor(m / 60); if (h < 24) return h + "h ago";
+        var d = Math.floor(h / 24); if (d < 30) return d + "d ago";
+        return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      }
+      function recordKeyUsage(key, tokens){
+        var u = getUsage(), id = keyHash(key);
+        var e = u[id] || { runs: 0, tokens: 0, last: 0, quotaAt: 0 };
+        e.runs += 1; e.tokens += (tokens || 0); e.last = Date.now();
+        u[id] = e; saveUsage(u);
+        renderApiBox();
+      }
+      function markKeyQuota(key){
+        var u = getUsage(), id = keyHash(key);
+        var e = u[id] || { runs: 0, tokens: 0, last: 0, quotaAt: 0 };
+        e.quotaAt = Date.now();
+        u[id] = e; saveUsage(u);
+        renderApiBox();
+      }
       function renderApiBox(){
         var keys = getKeys();
         var st = $("apiStatus"), txt = $("apiStatusTxt");
@@ -4703,9 +4755,26 @@
           st.classList.remove("on");
           txt.textContent = "Not connected";
         }
+        var usage = getUsage(), totRuns = 0, totTokens = 0;
+        keys.forEach(function(k){
+          var u = usage[keyHash(k)];
+          if (u){ totRuns += u.runs || 0; totTokens += u.tokens || 0; }
+        });
+        var tot = $("apiTotals");
+        if (tot) tot.innerHTML = '<span class="tlab">USAGE — THIS BROWSER</span>' +
+          '<span><b>' + keys.length + '</b> ' + (keys.length === 1 ? "key" : "keys") + '</span>' +
+          '<span><b>' + fmtNum(totRuns) + '</b> ' + (totRuns === 1 ? "run" : "runs") + '</span>' +
+          '<span><b>' + fmtNum(totTokens) + '</b> tokens used</span>';
         $("apiKeyList").innerHTML = keys.map(function(k, i){
+          var u = usage[keyHash(k)], stats;
+          if (u && u.runs > 0)
+            stats = u.runs + (u.runs === 1 ? " run" : " runs") + " · " + fmtNum(u.tokens) + " tokens · last used " + relTime(u.last);
+          else
+            stats = "Not used yet";
+          if (u && u.quotaAt) stats += ' · <span class="kquota">limit hit ' + relTime(u.quotaAt) + "</span>";
           return '<div class="keyrow"><span class="kname">Key ' + (i + 1) + '</span><span class="kmask mono">••••••••' + esc(k.slice(-4)) + '</span>' +
-            '<button type="button" class="kdel" data-delkey="' + i + '" aria-label="Remove Key ' + (i + 1) + '">Remove</button></div>';
+            '<button type="button" class="kdel" data-delkey="' + i + '" aria-label="Remove Key ' + (i + 1) + '">Remove</button>' +
+            '<span class="kstats">' + stats + "</span></div>";
         }).join("");
       }
       function addKeyFromInput(){
@@ -4723,8 +4792,10 @@
       $("apiKeyList").addEventListener("click", function(e){
         var b = e.target.closest("[data-delkey]"); if (!b) return;
         var keys = getKeys();
-        keys.splice(parseInt(b.getAttribute("data-delkey"), 10), 1);
-        saveKeys(keys); renderApiBox();
+        var removed = keys.splice(parseInt(b.getAttribute("data-delkey"), 10), 1)[0];
+        saveKeys(keys);
+        if (removed){ var u = getUsage(); delete u[keyHash(removed)]; saveUsage(u); }
+        renderApiBox();
         toast(keys.length ? "Key removed" : "Key removed — live research is off");
       });
       function flagApiNeeded(){
@@ -4814,7 +4885,9 @@
             if (!parts || !parts.length) throw new Error("gemini-empty");
             var out = parts.map(function(p){ return p.text || ""; }).join("").trim();
             out = out.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-            try { return JSON.parse(out); } catch (e) { throw new Error("gemini-parse"); }
+            var um = (data && data.usageMetadata) || {};
+            var tok = (typeof um.totalTokenCount === "number") ? um.totalTokenCount : ((um.promptTokenCount || 0) + (um.candidatesTokenCount || 0));
+            try { return { json: JSON.parse(out), tokens: tok }; } catch (e) { throw new Error("gemini-parse"); }
           });
         });
       }
@@ -4950,11 +5023,14 @@
         function tryCombo(ki, mi){
           if (ki >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
           if (mi >= GEMINI_MODELS.length) return tryCombo(ki + 1, 0);
-          return callGemini(keys[ki], GEMINI_MODELS[mi], promptText).then(function(data){
+          return callGemini(keys[ki], GEMINI_MODELS[mi], promptText).then(function(res){
+            var run = buildLiveRun(res.json, topic, market, want);
             usedKey = ki + 1; usedModel = GEMINI_MODELS[mi];
-            return buildLiveRun(data, topic, market, want);
+            recordKeyUsage(keys[ki], res.tokens);
+            return run;
           }).catch(function(err){
             lastErr = err;
+            if (err && err.status === 429) markKeyQuota(keys[ki]);
             var det = errDetail(err);
             if (mi + 1 < GEMINI_MODELS.length)
               logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " failed" + (det ? " (" + det + ")" : "") + " — trying " + GEMINI_MODELS[mi + 1], "err");
