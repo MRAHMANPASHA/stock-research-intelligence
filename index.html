@@ -4678,7 +4678,11 @@
       /* ================= GEMINI API KEYS (user's own, browser-only) =================
          Keys live ONLY in this browser's localStorage. They are sent solely to
          Google's Gemini endpoint when the user runs research — never anywhere else. */
-      var GEMINI_MODEL = "gemini-2.5-flash";
+      /* Model fallback chain (live-verified): the older 2.5/2.0/1.5 flash models are
+         retired by Google and answer 404, which used to kill every run at step one.
+         These current models are tried in order — any error moves to the next model,
+         and only when all of them fail does the next saved key take over. */
+      var GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
       var LS_KEYS = "sri_gemini_keys";
       function getKeys(){
         try {
@@ -4789,8 +4793,8 @@
         }
         return lines.join("\n");
       }
-      function callGemini(key, promptText){
-        return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent", {
+      function callGemini(key, model, promptText){
+        return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify({
@@ -4857,6 +4861,8 @@
       }
       function friendlyGeminiError(err){
         if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in Settings and it will be used automatically.";
+        if (err && /location is not supported|not supported in your|user location/i.test(err.gmsg || "")) return "Google says the Gemini API is not available from your current location, so the key could not run. The exact reply from Google is in the run log above.";
+        if (err && err.status === 404) return "Google could not serve any Gemini model for your key (HTTP 404). The exact reply from Google is in the run log above — if it keeps happening, create a fresh key in AI Studio and add it in Settings.";
         if (err && (err.status === 400 || err.status === 401 || err.status === 403 || /api key/i.test(err.gmsg || ""))) return "Google did not accept the API key. Open AI Studio, copy the key again, remove the old one in Settings and add the fresh copy.";
         if (err && err.message === "gemini-short") return "Gemini sent back an incomplete brief this time. Please run the research again.";
         if (err && (err.message === "gemini-parse" || err.message === "gemini-shape" || err.message === "gemini-empty")) return "Gemini sent back an answer that could not be read. Please run the research again.";
@@ -4930,23 +4936,38 @@
           btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Run Research';
         }
         var promptText = geminiPrompt(topic, market, mix, horizon, want);
-        var lastErr = null, usedKey = 0;
-        function attempt(i){
-          if (i >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
-          return callGemini(keys[i], promptText).then(function(data){
-            usedKey = i + 1;
+        var lastErr = null, usedKey = 0, usedModel = "";
+        function errDetail(err){
+          if (!err) return "";
+          var d = err.status ? "HTTP " + err.status : "";
+          if (err.gmsg) d += (d ? " — " : "") + err.gmsg;
+          else if (!err.status && err.message && !/^gemini-/.test(err.message)) d = err.message;
+          return d;
+        }
+        /* Walk keys x models: ANY failure on a model — 404 retired model, 429 limit,
+           503 high demand, an unreadable answer — moves straight to the next model on
+           the same key; only when every model has failed does the next key take over. */
+        function tryCombo(ki, mi){
+          if (ki >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
+          if (mi >= GEMINI_MODELS.length) return tryCombo(ki + 1, 0);
+          return callGemini(keys[ki], GEMINI_MODELS[mi], promptText).then(function(data){
+            usedKey = ki + 1; usedModel = GEMINI_MODELS[mi];
             return buildLiveRun(data, topic, market, want);
           }).catch(function(err){
             lastErr = err;
-            if (i + 1 < keys.length) logLine("Key " + (i + 1) + " could not finish — switching to Key " + (i + 2) + " automatically", "err");
-            return attempt(i + 1);
+            var det = errDetail(err);
+            if (mi + 1 < GEMINI_MODELS.length)
+              logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " failed" + (det ? " (" + det + ")" : "") + " — trying " + GEMINI_MODELS[mi + 1], "err");
+            else if (ki + 1 < keys.length)
+              logLine("Key " + (ki + 1) + " failed on every model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (ki + 2) + " automatically", "err");
+            return tryCombo(ki, mi + 1);
           });
         }
-        attempt(0).then(function(run){
+        tryCombo(0, 0).then(function(run){
           stopAnim();
           $("pipeTitle").textContent = "Done — brief ready";
           logLine("ALL CHECKS PASS", "ok");
-          logLine("fresh research received via Key " + usedKey, "ok");
+          logLine("fresh research received via Key " + usedKey + (usedModel && usedModel !== GEMINI_MODELS[0] ? " (" + usedModel + ")" : ""), "ok");
           RUNS.unshift(run); renderRuns(); renderSheet();
           restoreBtn();
           setTimeout(function(){ openRun(run); toast("Run " + run.id + " complete — fresh from Gemini (Key " + usedKey + ")"); }, 450);
@@ -4956,10 +4977,12 @@
           for (var i = 0; i < stepEls.length; i++){ if (stepEls[i] !== cur) stepEls[i].classList.remove("run"); }
           if (cur){ cur.classList.add("fail"); cur.querySelector(".ic").textContent = "!"; cur.querySelector(".st").textContent = "stopped"; }
           $("pipeTitle").textContent = "Research could not finish";
+          if (err && (err.status || err.gmsg)) logLine("Google answered: " + (err.status ? "HTTP " + err.status : "") + (err.gmsg ? (err.status ? " — " : "") + err.gmsg : ""), "err");
           var msg = friendlyGeminiError(err);
           logLine(msg, "err");
           restoreBtn();
-          toast(msg);
+          var det = errDetail(err);
+          toast(det ? msg + " Google said: " + (det.length > 130 ? det.slice(0, 130) + "…" : det) : msg);
         });
       }
 
