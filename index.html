@@ -73,6 +73,7 @@
       html[data-theme="light"] .btn.join-wa:hover{ background:#4ce184; border-color:#4ce184; }
       html[data-theme="light"] .log{ color:#93a9bd; }
       html[data-theme="light"] .log .ok{ color:#3ddc97; }
+      html[data-theme="light"] .log .warn{ color:#ffc24b; }
       html[data-theme="light"] .opp .score{ color:#e9eff6; }
       html[data-theme="light"] .opp-hero figcaption{ color:#c3d2e0; }
       html[data-theme="light"] .pill.pass{ background:rgba(13,157,99,.12); border-color:rgba(13,157,99,.4); }
@@ -156,6 +157,7 @@
       .api-notice b{ color:var(--ink); }
       .api-notice .btn{ margin-left:auto; }
       .log .err{ color:var(--red); }
+      .log .warn{ color:var(--amber); }
       .step.fail{ color:var(--red); }
       .step.fail .ic{ color:var(--red); }
       /* mobile menu toggle — only visible in the ≤820px layout */
@@ -5269,6 +5271,10 @@
         logEl.innerHTML = "";
         pipe.scrollIntoView({ behavior: "smooth", block: "nearest" });
         var stepEls = stepsEl.querySelectorAll(".step");
+        /* Log colours: "ok" green = received / complete; "warn" amber = a
+           failover or retry notice (a model or key was busy and the chain
+           moved on — the run is still going, not an error); "err" red is
+           reserved for the final failure of the whole run. */
         function logLine(text, cls){
           var div = document.createElement("div");
           if (cls) div.className = cls;
@@ -5406,15 +5412,15 @@
                 if (err && err.status === 429) markKeyQuota(keys[ki]);
                 var det = errDetail(err);
                 if (mi + 1 < GEMINI_MODELS.length)
-                  logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " failed" + (det ? " (" + det + ")" : "") + " — trying " + GEMINI_MODELS[mi + 1], "err");
+                  logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " could not answer" + (det ? " (" + det + ")" : "") + " — switching to " + GEMINI_MODELS[mi + 1], "warn");
                 else if (ki + 1 < keys.length)
-                  logLine("Key " + (ki + 1) + " failed on every model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (ki + 2) + " automatically", "err");
+                  logLine("Key " + (ki + 1) + " did not answer on any model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (ki + 2) + " automatically", "warn");
                 return tryCombo(ki, mi + 1);
               });
             }
             return tryCombo(0, 0).catch(function(err){
               if (pass < MAX_PASSES && passTransientOnly){
-                logLine("Google busy — every model failed with a temporary overload (503/429). Waiting " + RETRY_WAIT_S + "s, then trying again — attempt " + (pass + 1) + " of " + MAX_PASSES, "err");
+                logLine("Google is busy — every model is temporarily overloaded (503/429). Waiting " + RETRY_WAIT_S + "s, then trying again — attempt " + (pass + 1) + " of " + MAX_PASSES, "warn");
                 return chainWait(RETRY_WAIT_S).then(onePass);
               }
               throw err;
@@ -5479,7 +5485,7 @@
                 logLine("batch " + (idx + 1) + " of " + batches.length + " received via Key " + r.keyNo + (r.model !== GEMINI_MODELS[0] ? " (" + r.model + ")" : ""), "ok");
                 batchOpps.forEach(function(o){ avoid.push(conceptDigest(o)); });
               }, function(err){
-                logLine("batch " + (idx + 1) + " of " + batches.length + " could not be written by any key or model — those " + batchOpps.length + " opportunities will use locally built prompts; the run continues", "err");
+                logLine("batch " + (idx + 1) + " of " + batches.length + " could not be written by any key or model — those " + batchOpps.length + " opportunities will use locally built prompts; the run continues", "warn");
               });
             });
           });
