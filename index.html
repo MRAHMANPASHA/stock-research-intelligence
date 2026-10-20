@@ -5285,16 +5285,29 @@
            writing, and the elapsed clock shows the wait is the model's, not a hang. */
         var PARK_AT = LIVE_STEPS.length - 3;
         var batchCur = 0, batchTotal = 0;
+        /* Seconds left in a "Google busy" pause between chain passes (set by
+           runChain's auto-retry below). While it is above zero the parked step
+           row shows the retry countdown instead of the batch/elapsed text, so
+           the pause reads as the tool waiting on Google — never as a hang. */
+        var retryEta = 0;
         function startWaitClock(){
           var parked = stepEls[PARK_AT];
           parked.querySelector(".st").textContent = "waiting";
-          logLine("Gemini now answers in small pieces — the brief first, then the prompts a few opportunities at a time — so no single answer can run into the time limit");
+          logLine("writing prompts in batches — the brief comes first, then the prompts a few opportunities at a time, so no single answer can run into the time limit");
           waitTimer = setInterval(function(){
-            waitSecs += 5;
-            if (parked.classList.contains("run"))
-              parked.querySelector(".st").textContent = batchTotal ? ("batch " + Math.max(1, batchCur) + " of " + batchTotal + " · " + waitSecs + "s") : ("waiting · " + waitSecs + "s");
-            if (waitSecs === 30) logLine("still writing — the brief plus " + (want * 9) + " prompts is a lot of writing, but it now arrives in small batches instead of one giant answer");
-          }, 5000);
+            waitSecs += 1;
+            var stEl = parked.querySelector(".st");
+            if (retryEta > 0){
+              stEl.textContent = "Google busy — retry in " + retryEta + "s";
+            } else if (parked.classList.contains("run")){
+              stEl.textContent = batchTotal ? ("batch " + Math.max(1, batchCur) + " of " + batchTotal + " · " + waitSecs + "s") : ("waiting · " + waitSecs + "s");
+            }
+            if (waitSecs % 15 === 0){
+              if (retryEta > 0) logLine("Google is still busy — next attempt in " + retryEta + "s");
+              else if (batchTotal) logLine("still writing — batch " + Math.max(1, batchCur) + " of " + batchTotal + " · " + waitSecs + "s elapsed");
+              else logLine("still working — waiting for Gemini's answer · " + waitSecs + "s elapsed");
+            }
+          }, 1000);
         }
         function stopWaitClock(){ if (waitTimer){ clearInterval(waitTimer); waitTimer = null; } }
         function advance(){
@@ -5347,27 +5360,67 @@
            the chain moving (a malformed answer retries like any other failure). Every
            successful call credits its tokens to the key that answered; the brief call
            (creditRun) also counts as the run in the usage tally. */
+        /* Auto-retry passes: Google sometimes answers 503 "high demand" (or 429)
+           on EVERY model at the same moment — a demand spike that usually
+           clears within seconds, but one pass over the chain used to end the
+           run on it. isTransientErr recognises exactly those temporary
+           failures; when a whole pass over all keys x models fails with
+           nothing else, the chain waits about 15 seconds — the parked step
+           row counts the pause down via retryEta and the log says why — then
+           runs the pass again, up to 3 passes in total. A pass hit by any
+           non-transient error (bad key, unreadable answer, timeout) is NOT
+           retried: the call ends at once with the real error. Success on any
+           pass continues the run exactly as before. This wraps every call —
+           the brief call and each prompt-batch call alike. */
+        function isTransientErr(err){
+          if (!err) return false;
+          if (err.status === 503 || err.status === 429) return true;
+          return /high demand|overload|unavailable|temporarily|try again later|resource.?exhausted/i.test((err.gmsg || "") + " " + (err.message || ""));
+        }
+        function chainWait(seconds){
+          return new Promise(function(resolve){
+            retryEta = seconds;
+            var iv = setInterval(function(){
+              retryEta -= 1;
+              if (retryEta <= 0){ retryEta = 0; clearInterval(iv); resolve(); }
+            }, 1000);
+          });
+        }
         function runChain(promptText, timeoutMs, creditRun, onOk){
-          lastErr = null;
-          function tryCombo(ki, mi){
-            if (ki >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
-            if (mi >= GEMINI_MODELS.length) return tryCombo(ki + 1, 0);
-            return callGemini(keys[ki], GEMINI_MODELS[mi], promptText, timeoutMs).then(function(res){
-              var value = onOk(res.json);
-              if (creditRun) recordKeyUsage(keys[ki], res.tokens); else recordKeyTokens(keys[ki], res.tokens);
-              return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[mi] };
-            }).catch(function(err){
-              lastErr = err;
-              if (err && err.status === 429) markKeyQuota(keys[ki]);
-              var det = errDetail(err);
-              if (mi + 1 < GEMINI_MODELS.length)
-                logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " failed" + (det ? " (" + det + ")" : "") + " — trying " + GEMINI_MODELS[mi + 1], "err");
-              else if (ki + 1 < keys.length)
-                logLine("Key " + (ki + 1) + " failed on every model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (ki + 2) + " automatically", "err");
-              return tryCombo(ki, mi + 1);
+          var MAX_PASSES = 3, RETRY_WAIT_S = 15;
+          var pass = 0;
+          function onePass(){
+            pass += 1;
+            lastErr = null;
+            var passTransientOnly = true;
+            function tryCombo(ki, mi){
+              if (ki >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
+              if (mi >= GEMINI_MODELS.length) return tryCombo(ki + 1, 0);
+              return callGemini(keys[ki], GEMINI_MODELS[mi], promptText, timeoutMs).then(function(res){
+                var value = onOk(res.json);
+                if (creditRun) recordKeyUsage(keys[ki], res.tokens); else recordKeyTokens(keys[ki], res.tokens);
+                return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[mi] };
+              }).catch(function(err){
+                lastErr = err;
+                if (!isTransientErr(err)) passTransientOnly = false;
+                if (err && err.status === 429) markKeyQuota(keys[ki]);
+                var det = errDetail(err);
+                if (mi + 1 < GEMINI_MODELS.length)
+                  logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " failed" + (det ? " (" + det + ")" : "") + " — trying " + GEMINI_MODELS[mi + 1], "err");
+                else if (ki + 1 < keys.length)
+                  logLine("Key " + (ki + 1) + " failed on every model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (ki + 2) + " automatically", "err");
+                return tryCombo(ki, mi + 1);
+              });
+            }
+            return tryCombo(0, 0).catch(function(err){
+              if (pass < MAX_PASSES && passTransientOnly){
+                logLine("Google busy — every model failed with a temporary overload (503/429). Waiting " + RETRY_WAIT_S + "s, then trying again — attempt " + (pass + 1) + " of " + MAX_PASSES, "err");
+                return chainWait(RETRY_WAIT_S).then(onePass);
+              }
+              throw err;
             });
           }
-          return tryCombo(0, 0);
+          return onePass();
         }
         /* Merge one batch answer into its opportunities: items are matched by exact
            title first, then by position, and normalised into skeleton-complete JSON. */
