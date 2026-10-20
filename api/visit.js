@@ -1,6 +1,9 @@
 // Unique visitor counter API — 1 user = 1 count, never per-visit.
-// Storage: Upstash Redis over REST.
-//   Env vars: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+// Storage: Upstash Redis over REST. The Vercel Marketplace integration
+// injects the connection under KV-style names, so accept any of:
+//   UPSTASH_REDIS_REST_URL            / UPSTASH_REDIS_REST_TOKEN
+//   UPSTASH_REDIS_REST_KV_REST_API_URL / UPSTASH_REDIS_REST_KV_REST_API_TOKEN
+//   KV_REST_API_URL                    / KV_REST_API_TOKEN
 // POST /api/visit — register this visitor once (deduped server-side by a
 //   salted hash of their IP) and return the total unique count.
 // GET  /api/visit — return the current total without registering.
@@ -8,11 +11,20 @@
 // site falls back to its local per-browser number.
 const crypto = require("crypto");
 
+const REST_URL =
+  process.env.UPSTASH_REDIS_REST_URL ||
+  process.env.UPSTASH_REDIS_REST_KV_REST_API_URL ||
+  process.env.KV_REST_API_URL;
+const REST_TOKEN =
+  process.env.UPSTASH_REDIS_REST_TOKEN ||
+  process.env.UPSTASH_REDIS_REST_KV_REST_API_TOKEN ||
+  process.env.KV_REST_API_TOKEN;
+
 async function redis(commands) {
-  const r = await fetch(process.env.UPSTASH_REDIS_REST_URL + "/pipeline", {
+  const r = await fetch(REST_URL + "/pipeline", {
     method: "POST",
     headers: {
-      Authorization: "Bearer " + process.env.UPSTASH_REDIS_REST_TOKEN,
+      Authorization: "Bearer " + REST_TOKEN,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(commands),
@@ -23,9 +35,7 @@ async function redis(commands) {
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  const configured = !!(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-  );
+  const configured = !!(REST_URL && REST_TOKEN);
   if (!configured)
     return res.status(200).json({ count: null, configured: false });
   try {
