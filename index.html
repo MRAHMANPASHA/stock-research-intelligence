@@ -1019,7 +1019,62 @@
         }
       ];
       var runSeq = 60269;
-      var currentRun = null, currentOpp = null, currentOppIdx = 0, currentTab = "design", oppFilterFmt = "All", sheetTab = "briefs";
+      var currentRun = null, currentOpp = null, currentOppIdx = 0, currentTab = "design", oppFilterFmt = "All", sheetTab = "briefs", currentViewName = "home";
+
+      /* ================= SAVED RUNS (persisted in this browser) =================
+         A finished run used to live only in this page's memory, so a refresh
+         wiped everything the user had researched. User runs are now saved to
+         localStorage the moment they complete and restored on load, so Past
+         Runs, the Brief, Opportunities and Sheet Data all survive a reload.
+         The two built-in sample runs ship inside the page and are never saved.
+         At most the newest MAX_SAVED_RUNS user runs are kept; if the browser's
+         storage fills up, the oldest saved run is dropped and the save retried,
+         so a full storage can never break a run. The Gemini keys and the usage
+         tally keep their own separate storage entries and are untouched. */
+      var LS_RUNS = "sri_user_runs";
+      var MAX_SAVED_RUNS = 8;
+      var SEED_RUN_IDS = {};
+      RUNS.forEach(function(r){ SEED_RUN_IDS[r.id] = 1; });
+      function saveUserRuns(){
+        try {
+          var store = { seq: runSeq, runs: RUNS.filter(function(r){ return !SEED_RUN_IDS[r.id]; }).slice(0, MAX_SAVED_RUNS) };
+          for (;;){
+            try { localStorage.setItem(LS_RUNS, JSON.stringify(store)); return; }
+            catch (e) {
+              if (store.runs.length <= 1){ try { localStorage.removeItem(LS_RUNS); } catch (x) {} return; }
+              store.runs = store.runs.slice(0, store.runs.length - 1);
+            }
+          }
+        } catch (e) {}
+      }
+      (function restoreUserRuns(){
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(LS_RUNS) || "null"); } catch (e) {}
+        if (!saved || !Array.isArray(saved.runs)) return;
+        var valid = saved.runs.filter(function(r){
+          return r && typeof r.id === "string" && typeof r.topic === "string" &&
+            Array.isArray(r.opportunities) && r.opportunities.length > 0 &&
+            r.opportunities.every(function(o){ return o && typeof o.title === "string"; });
+        }).slice(0, MAX_SAVED_RUNS);
+        valid.forEach(function(r){
+          var n = parseInt(String(r.id).replace(/\D/g, ""), 10);
+          if (!isNaN(n) && n >= runSeq) runSeq = n + 1;
+        });
+        if (typeof saved.seq === "number" && saved.seq > runSeq) runSeq = saved.seq;
+        for (var i = valid.length - 1; i >= 0; i--) RUNS.unshift(valid[i]);
+      })();
+      /* The place the user left is saved too: which run was open, which
+         screen (Brief / Opportunities / Opportunity Detail / Export …),
+         which opportunity and which prompt tab — so a refresh reopens the
+         app exactly as it was left, not back at the start. Kept in its own
+         storage entry; written from show()/openOpp() and read once at init
+         (see restoreUiState at the bottom of this script). */
+      var LS_UI = "sri_ui_state";
+      function saveUiState(){
+        try {
+          localStorage.setItem(LS_UI, JSON.stringify({ run: currentRun ? currentRun.id : null, view: currentViewName, opp: currentOppIdx, tab: currentTab }));
+        } catch (e) {}
+      }
 
       /* ================= IMAGES (local library, dealt uniquely per run) ================= */
       function setFiles(prefix, n){ var a = []; for (var i = 1; i <= n; i++) a.push("assets/" + prefix + "-" + (i < 10 ? "0" + i : i) + ".jpg"); return a; }
@@ -1089,6 +1144,36 @@
         Object.keys(base).forEach(function(k){ if (k in src) base[k] = take(base[k], src[k]); });
         return base;
       }
+      /* A video prompt must read as MOTION — a subject doing something over
+         time, a camera move, a beginning and an end — never as a still photo
+         with the word "video" swapped in. If a returned video prompt carries
+         no movement language at all (a model occasionally copies its own
+         image prompt into the video slot), an explicit motion direction is
+         appended, so a video prompt can never be the image prompt's text. */
+      var PJ_MOTION_RE = /(mov(e|es|ed|ing|ement)|motion|pan\b|panning|tilt|dolly|glide|zoom|drift|sweep|orbit|tracking|walk|flow|seconds|duration|clip|footage|continuous|unfold)/i;
+      var PJ_PROGRESSION_RE = /(opens|opening|begins|beginning|starts|starting|midway|middle of|ends|ending|finishes|closes|closing|settles|completes|unfolds|unfolding|develops|finally)/i;
+      function pjEnforceMotion(o, i){
+        if (!o || typeof o.prompt !== "string") return;
+        var dur = (o.technical && o.technical.duration_seconds) || [6, 8, 10][i];
+        var mv = (o.technical && o.technical.camera_movement) || PJ_CAMMOVE[i];
+        /* A video prompt needs BOTH real movement AND a progression through
+           time (how the shot opens, what happens in the middle, how it
+           ends). A model occasionally copies its own image prompt into the
+           video slot; whichever part is missing is appended explicitly, so
+           a video prompt can never be the image prompt's text with the word
+           "video" swapped in. */
+        var needsMotion = !PJ_MOTION_RE.test(o.prompt), needsProgression = !PJ_PROGRESSION_RE.test(o.prompt);
+        if (needsMotion)
+          o.prompt += " Presented as a moving shot, not a still frame: the subject stays in continuous natural motion while the camera makes a " + mv + ", the action unfolding over " + dur + " seconds.";
+        if (needsProgression)
+          o.prompt += " The shot opens with the action already under way, develops through the middle seconds as the subject's movement builds, and ends as the action completes on a clean closing frame.";
+        if (o.composition && typeof o.composition === "object" && !/mov|camera/i.test(o.composition.framing || "")) o.composition.framing = String(o.composition.framing || "") + " — framed for a moving shot: subject in continuous action, camera " + mv;
+        if (o.technical && typeof o.technical === "object"){
+          if (!o.technical.duration_seconds) o.technical.duration_seconds = dur;
+          if (!o.technical.camera_movement) o.technical.camera_movement = mv;
+          if (!o.technical.motion_guidance) o.technical.motion_guidance = "subject moves continuously from the opening frame to the closing frame; one continuous take, no cuts, no static hold";
+        }
+      }
       function pjBuild(type, prose, topic, opp, n, src){
         var i = (n - 1) % 3;
         var pal = PJ_PALETTES[(n + opp.title.length) % PJ_PALETTES.length];
@@ -1112,14 +1197,14 @@
         } else if (type === "video"){
           meta.category = "Video · " + topic;
           base = {
-            prompt: prose || ("Stock video clip: " + t + " — " + PJ_CAMMOVE[i] + ", natural unhurried subject motion, one continuous take, no cuts, clean frame edges kept clear for overlay text."),
+            prompt: prose || ("Stock video clip, " + [6, 8, 10][i] + " seconds: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + PJ_CAMMOVE[i] + "; midway the action develops and the framing draws closer to the key detail, and the clip ends as the action completes and the subject settles into a clean closing frame. One continuous take, no cuts, clean frame edges kept clear for overlay text."),
             style: { medium: "video footage", artistic_style: "cinematic realism", aesthetic: "natural, authentic, commercial stock quality", render_or_film: "4K video, fine natural grain, soft highlight roll-off" },
             subject: { primary_subject: t, secondary_elements: "environment and props that support the action, moving naturally in frame", silhouette_and_proportions: "subject clearly readable at thumbnail size; realistic proportions throughout the move" },
             composition: { framing: PJ_FRAMING[i], camera_angle: PJ_ANGLE[i], depth_of_field: PJ_DOF[i], focal_length: PJ_FOCAL[i], rule_of_thirds_or_symmetry: PJ_COMP[i] },
             lighting_and_color: lighting,
             typography: { has_text: false, exact_text: "", font_style: "" },
             negative_prompt: PJ_NEG + ", camera shake, jump cuts, flicker, warped motion",
-            technical: { aspect_ratio: "16:9", duration_seconds: [6, 8, 10][i], fps: 24, camera_movement: PJ_CAMMOVE[i], motion_guidance: "one continuous move, natural subject motion, clean loop point, no cuts" },
+            technical: { aspect_ratio: "16:9", duration_seconds: [6, 8, 10][i], fps: 24, camera_movement: PJ_CAMMOVE[i], motion_guidance: "subject in continuous action from the opening frame to the closing frame; the shot opens in motion, develops midway and ends as the action completes; one continuous take, no cuts, no static hold" },
             metadata: meta
           };
         } else {
@@ -1136,7 +1221,9 @@
             metadata: meta
           };
         }
-        return pjMerge(base, src);
+        var built = pjMerge(base, src);
+        if (type === "video") pjEnforceMotion(built, i);
+        return built;
       }
       function pjString(type, prose, topic, opp, n, src){ return JSON.stringify(pjBuild(type, prose, topic, opp, n, src), null, 2); }
       /* Normalise whatever a live model returned — proper JSON objects, JSON
@@ -1168,14 +1255,18 @@
           "Design brief for " + topic + ": hero visual of " + t.toLowerCase() + ", premium editorial style, consistent lighting direction, space at top for title placement, high commercial appeal."
         ];
         var imageProse = [
-          "Photorealistic stock photo: " + t + ", shot on 50mm lens, natural window light, authentic candid expressions, shallow depth of field, high detail, commercial licensing quality.",
-          "Editorial photograph: " + t.toLowerCase() + " — real people, real environment, no staged posing, muted warm color grade, copy space on the right side of frame.",
-          "Bright lifestyle image: " + t + ", golden-hour ambience, crisp focus on the main subject, background softly blurred, suitable for web hero banners and social crops (4:5 safe area)."
+          "Photorealistic stock photo: " + t + " — one single frozen instant, shot on 50mm lens, natural window light, authentic candid expressions, shallow depth of field, high detail, commercial licensing quality.",
+          "Editorial photograph: " + t.toLowerCase() + " — a single captured moment frozen in time, real people, real environment, no staged posing, muted warm color grade, copy space on the right side of frame.",
+          "Bright lifestyle image: " + t + " — one still frame only, golden-hour ambience, crisp focus on the main subject, background softly blurred, suitable for web hero banners and social crops (4:5 safe area)."
         ];
+        /* Video prose is authored as motion from the first word — never a
+           reworded still: every line names the subject's action over time,
+           the camera move, how the shot opens, what happens in the middle,
+           how it ends, and its duration. */
         var videoProse = [
-          "6-second stock video loop: " + t + " — slow push-in camera move, seamless loop point, no cuts, natural motion, 4K, clean frame edges for text overlay.",
-          "Vertical 9:16 stock clip (8s): " + t.toLowerCase() + ", handheld-authentic feel, subject enters frame in first second, hold final pose 2 seconds for end-card text.",
-          "Cinematic b-roll (10s): " + t + ", gentle gimbal glide, rich ambient detail, soft highlight roll-off, deliver with 16:9 and 1:1 safe framing."
+          "6-second stock video: " + t + " — the shot opens on the scene already in motion, the subject working and moving continuously through its action while the camera makes a slow push-in; midway the key moment develops in closer view, and the clip ends as the action completes on a clean final frame that loops seamlessly. One continuous take, no cuts, 4K, clean frame edges for text overlay.",
+          "Vertical 9:16 stock video (8 seconds): " + t.toLowerCase() + " — opens as the subject enters the frame and begins the action; the camera tracks the movement at a natural pace with a handheld-authentic feel; through the middle seconds the action builds, and the clip ends with the subject completing the action as the motion eases out, leaving room for end-card text.",
+          "Cinematic b-roll video (10 seconds): " + t + " — opens on a moving detail of the scene, then the camera glides laterally to reveal the full setting while the subject's action unfolds; the middle of the shot follows the action at its peak, and it ends by drifting wider as the action resolves. Rich ambient motion throughout, soft highlight roll-off, 16:9 with 1:1 safe framing."
         ];
         return {
           design: wrap(designProse.map(function(p, i){ return pjString("design", p, topic, opp, i + 1, null); }), "design"),
@@ -1188,6 +1279,7 @@
       /* ================= NAVIGATION ================= */
       var VIEW_LABELS = { home:"NEW RESEARCH", runs:"PAST RUNS", brief:"RESEARCH BRIEF", opps:"OPPORTUNITIES", opp:"OPPORTUNITY", export:"EXPORT", sheet:"SHEET DATA", days:"AWARENESS DAYS", settings:"SETTINGS" };
       function show(view){
+        currentViewName = view;
         var views = document.querySelectorAll(".view");
         for (var i = 0; i < views.length; i++) views[i].classList.remove("on");
         $("view-" + view).classList.add("on");
@@ -1198,6 +1290,7 @@
         }
         $("crumbView").textContent = VIEW_LABELS[view] || "";
         window.scrollTo(0, 0);
+        saveUiState();
       }
       $("nav").addEventListener("click", function(e){
         var b = e.target.closest("button"); if (!b || b.disabled) return;
@@ -1265,10 +1358,15 @@
       (function(){
         var btn = $("themeBtn");
         if (!btn) return;
+        var html = document.documentElement;
+        /* the chosen theme is remembered in this browser, so a refresh
+           keeps the mode the user picked; white stays the default */
+        try {
+          if (localStorage.getItem("sri_theme") === "dark") html.removeAttribute("data-theme");
+        } catch (e) {}
         btn.addEventListener("click", function(){
-          var html = document.documentElement;
-          if (html.getAttribute("data-theme") === "light") html.removeAttribute("data-theme");
-          else html.setAttribute("data-theme", "light");
+          if (html.getAttribute("data-theme") === "light"){ html.removeAttribute("data-theme"); try { localStorage.setItem("sri_theme", "dark"); } catch (e) {} }
+          else { html.setAttribute("data-theme", "light"); try { localStorage.setItem("sri_theme", "light"); } catch (e) {} }
         });
       })();
 
@@ -1441,6 +1539,7 @@
         currentTab = b.getAttribute("data-tab");
         this.querySelectorAll("button").forEach(function(x){ x.classList.toggle("on", x === b); });
         renderPrompts();
+        saveUiState();
       });
       document.addEventListener("click", function(e){
         var c = e.target.closest("[data-copy]"); if (!c) return;
@@ -1575,7 +1674,7 @@
             }
           });
           var run = existing || (base ? resizedRun(base, want) : genericRun(t, market, want));
-          if (run !== existing){ RUNS.unshift(run); renderRuns(); renderSheet(); }
+          if (run !== existing){ RUNS.unshift(run); saveUserRuns(); renderRuns(); renderSheet(); }
           setTimeout(function(){ openRun(run); toast("Run " + run.id + " complete — quality PASS"); }, 450);
         }
       }
@@ -3436,12 +3535,12 @@
         { f: "assets/ev/bbq2-01.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-01.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/eggs2-01.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
-        { f: "assets/ev/steak2-04.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
-        { f: "assets/ev/steak2-05.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-01.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-02.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/bread2-02.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/bbq2-02.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/cheesecake2-01.jpg", t: "cheesecake cafe", c: "Food & Drink" },
-        { f: "assets/ev/steak2-06.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-03.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/eggs2-02.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
         { f: "assets/ev/bbq2-03.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-03.jpg", t: "artisan bread bakery", c: "Food & Drink" },
@@ -4591,22 +4690,48 @@
         /* Hyper-specific sensitive subjects (blood donation, cancer
            ward, funeral…) may only illustrate a run whose own topic or
            title actually asks for them — never an unrelated topic. */
-        var EV_HARD = /blood|cancer|hiv|aids|funeral|coffin|refugee|down syndrome|autism|alzheimer|dementia|suicide|overdose/;
+        /* Case-insensitive: topics and titles speak of "Breast Cancer",
+           "HIV" and "AIDS" capitalised, and a case-sensitive test read
+           them as NOT asking for the subject — which gated every
+           cancer-tagged photo out of the Breast Cancer run itself. */
+        var EV_HARD = /blood|cancer|hiv|aids|funeral|coffin|refugee|down syndrome|autism|alzheimer|dementia|suicide|overdose/i;
         var hardQ = run.opportunities.map(function (o) { return EV_HARD.test(run.topic + " " + o.title); });
-        var qtTopic = evQueryToks(run.topic);
-        var topicSc = EV_LIB.map(function (e, i) { return evPairScore(qtTopic, i)[0]; });
-        /* Opportunity scoring is deliberately gentler than the shared
-           day-name scorer (evPairScore): its rarity bonuses (+10 for a token
-           found on a single photo) let incidental words — "flat lay",
-           "setup", "grass" — outscore the concept itself, and day-name
-           aliases ("heritage" -> "landmark travel tourism") explode any
-           title that merely contains the word. So here the rarity bonus is
-           capped, and the title's own words lead, alias expansions second. */
+        /* Strict token match for opportunities. The shared day-name matcher
+           (evMatch) is too loose here: it equates a stemmed compound with
+           its opening syllable — "milkweed" stems to "milkwe", which the old
+           prefix rule matched against "milk" — and that is how a milkweed-pod
+           card once received a glass of milk. Here a match must be exact, or
+           a prefix match where BOTH tokens are at least 5 chars and close in
+           length, or share an 8+ character prefix. (Even 7 is too few:
+           "community" and "communication" share "communi", which once dealt
+           sign-language photos to community-seed-library cards.) */
+        function oppMatch(a, b) {
+          if (a === b) return true;
+          var lo = Math.min(a.length, b.length), hi = Math.max(a.length, b.length);
+          if (lo >= 5 && hi - lo <= 2 && (a.indexOf(b) === 0 || b.indexOf(a) === 0)) return true;
+          var n = 0;
+          while (n < lo && a.charAt(n) === b.charAt(n)) n++;
+          return n >= 8;
+        }
+        function dedupeToks(s) {
+          var seen = {}, out = [];
+          evToks(s).forEach(function (t) { if (!seen[t]) { seen[t] = 1; out.push(t); } });
+          return out;
+        }
+        /* Score one photo against one set of query tokens; returns
+           [score, coverage, hits], where hits counts how many DISTINCT query
+           tokens the photo matches — the number the two-strong-words rule in
+           the dealing passes below is built on. Aliases are never consulted
+           for opportunities: one word in a title must not be able to open
+           another domain's tag set (the old alias expansion is gone). */
         function oppPair(qt, idx) {
-          var s = 0, matched = 0, set = EV_TAGS[idx];
-          Object.keys(set).forEach(function (t) {
+          var set = EV_TAGS[idx], imgToks = Object.keys(set), s = 0, matched = 0, hits = 0;
+          qt.forEach(function (q) {
+            for (var i = 0; i < imgToks.length; i++) if (oppMatch(imgToks[i], q)) { hits++; break; }
+          });
+          imgToks.forEach(function (t) {
             var hit = false;
-            for (var i = 0; i < qt.length; i++) if (evMatch(t, qt[i])) { hit = true; break; }
+            for (var i = 0; i < qt.length; i++) if (oppMatch(t, qt[i])) { hit = true; break; }
             if (hit) {
               matched++;
               s += EV_W[t] || 1;
@@ -4614,19 +4739,177 @@
               if (d === 1) s += 4; else if (d === 2) s += 2; else if (d === 3) s += 1;
             }
           });
-          return [s, matched / Math.max(1, Object.keys(set).length), matched];
+          return [s, matched / Math.max(1, imgToks.length), hits];
         }
+        var qtTopic = dedupeToks(run.topic);
+        var topicSc = [], topicHits = [];
+        EV_LIB.forEach(function (e, i) { var tp = oppPair(qtTopic, i); topicSc.push(tp[0]); topicHits.push(tp[2]); });
+        /* Medium / format words name the KIND of asset, not its concept —
+           "vector", "infographic", "macro", "photo", "diagram" — so they are
+           removed from the scoring tokens. Left in, a lone "vector" (a rare
+           tag, so heavily weighted) once scored an office posture diagram
+           onto a seed-library infographic card through the fallback. A
+           title's concept words alone decide its picture. */
+        var MEDIUM_TOKENS = { vector: 1, infographic: 1, isometric: 1, macro: 1, photo: 1, photograph: 1, photographi: 1, video: 1, illustration: 1, cinematic: 1, diagram: 1, chart: 1, poster: 1, animation: 1, footage: 1, clip: 1,
+          /* Camera / composition words are not concepts either: "top view"
+             and "window light" are how a shot is framed, not what it shows.
+             Left countable, two of them together formed a fake two-word
+             match — a mince-pie card once scored a desk photo on the shared
+             words "window" + "light", and a shortbread card a desk flat-lay
+             on "top" + "view". Framing words may never count as hits. */
+          top: 1, view: 1, close: 1, closeup: 1, shot: 1, wide: 1, slow: 1, overhead: 1, aerial: 1, flat: 1, lay: 1, background: 1, foreground: 1, detail: 1, angle: 1, perspective: 1, loop: 1, broll: 1, window: 1, light: 1, lighting: 1, studio: 1,
+          /* Generic material / furniture / container words are not concepts
+             either: "glass" is a material (a cocktail glass is not a test
+             tube), "table" is furniture (a seder table is not a seed-swap
+             table). Counted as hits, they dealt a bar photo to a seed-vault
+             card and a dinner photo to a volunteers card. */
+          glass: 1, glas: 1, table: 1, wooden: 1, wood: 1, paper: 1, rustic: 1, village: 1, hall: 1, room: 1, wall: 1, floor: 1, board: 1, cup: 1, mug: 1, plate: 1, jar: 1, bar: 1 };
         var rawSc = run.opportunities.map(function (o) {
-          var qt = evToks(o.title);
-          return EV_LIB.map(function (e, i) { return oppPair(qt, i); });
-        });
-        var aliSc = run.opportunities.map(function (o) {
-          var qt = evQueryToks(o.title);
+          var qt = dedupeToks(o.title).filter(function (t) { return !MEDIUM_TOKENS[t]; });
           return EV_LIB.map(function (e, i) { return oppPair(qt, i); });
         });
         function pairVal(oi, idx) {
-          var r = rawSc[oi][idx], a = aliSc[oi][idx];
-          return r[0] * 10 + a[0] * 3 + r[1] * 5 + r[2] * 6 + topicSc[idx];
+          var r = rawSc[oi][idx];
+          return r[0] * 10 + r[1] * 5 + r[2] * 6 + topicSc[idx];
+        }
+        /* Wrong-domain gate. Some library photos belong to a world of their
+           own — a tennis court, an optician's shop, a dairy shelf, a
+           Halloween illustration. One shared word ("grass", "glass", "milk",
+           a porch) must never pull such a photo onto a card from another
+           world: when a photo carries a domain marker, it may only
+           illustrate a card whose own title (or the run's topic) speaks that
+           domain's language. Markers are matched as whole words against the
+           raw tag string and the raw title text, so "milkweed" does not open
+           the dairy door and "glass test tubes" do not open the optician's. */
+        var OFF_DOMAINS = [
+          { img: ["tennis", "wimbledon", "soccer", "football", "basketball", "baseball", "volleyball", "cricket", "rugby", "boxing"],
+            ok: ["tennis", "soccer", "football", "basketball", "baseball", "volleyball", "cricket", "rugby", "boxing", "sport", "sports", "stadium", "athlete", "olympic", "gym", "workout", "fitness", "match"] },
+          { img: ["optician", "optometrist", "phoropter", "eyeglasses", "spectacles"],
+            ok: ["eye", "eyes", "vision", "optician", "optometrist", "glasses", "eyeglasses", "sight", "optical"] },
+          { img: ["milk", "dairy"],
+            ok: ["milk", "dairy", "cheese", "butter", "yogurt", "yoghurt", "cow", "cows", "goat", "breakfast"] },
+          { img: ["halloween"],
+            ok: ["halloween", "ghost", "ghosts", "spooky", "pumpkin", "pumpkins", "witch", "haunted", "vampire", "skeleton", "zombie", "costume", "costumes"] },
+          { img: ["christmas", "xmas"],
+            ok: ["christmas", "xmas", "santa", "reindeer", "nativity", "advent", "festive", "ornament", "ornaments"] },
+          { img: ["mooncake", "mooncakes"],
+            ok: ["mooncake", "mooncakes", "mid-autumn", "lantern", "lanterns"] },
+          { img: ["deaf"],
+            ok: ["deaf", "sign", "hearing", "accessibility", "asl", "interpreter", "interpreting"] },
+          /* The remote-work set is its own world too: every one of its
+             photos carries the tag "remote", so a desk-and-laptop shot may
+             only illustrate a card whose topic or title is about work,
+             offices or screens — never a baking, gardening or holiday card
+             that merely shares a framing word with it. */
+          { img: ["remote"],
+            ok: ["remote", "office", "desk", "laptop", "computer", "coworking", "freelancer", "workspace", "workplace", "hybrid", "business", "meeting", "standup", "whiteboard", "ergonomic"] },
+          /* A chocolate product shot (hot chocolate mug, chocolate cake)
+             belongs to the food world: fine for a baking or dessert card,
+             wrong for a frosty-garden or nature card that shares only the
+             word "winter" with its tags. */
+          { img: ["chocolate"],
+            ok: ["chocolate", "cocoa", "dessert", "baking", "bakery", "cake", "cookie", "sweet", "candy", "confectionery", "hot drink"] },
+          { img: ["beer"],
+            ok: ["beer", "pub", "brewery", "oktoberfest", "ale", "lager", "bar", "party", "celebration", "friends", "drink", "drinks"] },
+          /* A barbecue grill is a food scene, not a garden scene: sharing
+             the words "summer" and "garden" with a sunflower card must not
+             deal it grilled food and friends. */
+          { img: ["barbecue", "bbq", "grill"],
+            ok: ["barbecue", "bbq", "grill", "cookout", "food", "cooking", "chef", "recipe", "picnic", "dinner", "lunch", "breakfast", "meal", "restaurant", "kitchen"] },
+          /* A meditation / yoga silhouette is a wellness picture: sharing
+             the word "silhouette" or "sunset" with a botany card must not
+             deal it a mindfulness stock photo. */
+          { img: ["meditation", "meditate", "mindfulness", "yoga", "spa"],
+            ok: ["meditation", "meditate", "mindfulness", "yoga", "wellness", "mental", "spa", "relax", "relaxation", "calm", "fitness", "exercise", "health"] },
+          /* Charity volunteers packing food donations are their own
+             world: only a card that itself speaks of volunteering,
+             charity or donations may use them — a seed-swap card that
+             happens to say "volunteers" qualifies, its neighbours do
+             not. */
+          { img: ["volunteers", "charity"],
+            ok: ["volunteer", "volunteers", "charity", "donation", "donations", "donate", "fundraiser", "fundraising", "food bank", "nonprofit", "community service"] },
+          /* Single-word traps, each its own world: a coffee cup is not
+             a bean harvest, a kite is not a barley field, a recycling
+             sort is not seed sorting, a Pride parade is not a community
+             seed library, and a beach is not a summer garden. Each may
+             only illustrate a card that speaks its own language. */
+          { img: ["coffee"],
+            ok: ["coffee", "cafe", "espresso", "cappuccino", "latte", "barista"] },
+          { img: ["kite", "kites"],
+            ok: ["kite", "kites", "festival"] },
+          { img: ["recycling", "recycle", "recycled"],
+            ok: ["recycling", "recycle", "recycled", "waste", "sustainability", "plastic", "environment", "earth day", "cleanup", "climate"] },
+          { img: ["pride", "lgbt"],
+            ok: ["pride", "lgbt", "lgbtq", "rainbow"] },
+          { img: ["beach"],
+            ok: ["beach", "ocean", "sea", "seaside", "coast", "coastal", "swim", "swimming", "surf", "vacation", "holiday", "island", "tropical", "sand"] },
+          /* An awareness ribbon is a health symbol, not a generic ribbon:
+             breast-cancer photos may only illustrate a run that speaks
+             of breast cancer, screening or survivorship — never a
+             wedding card that merely mentions a silk ribbon. */
+          { img: ["breast"],
+            ok: ["breast", "cancer", "mammogram", "screening", "survivor", "oncology"] },
+          /* A homeless shelter is a poverty scene, not a "community"
+             scene: the shared word "community" must not deal it to a
+             seed-library card. */
+          { img: ["homeless", "poverty", "shelter"],
+            ok: ["homeless", "homelessness", "poverty", "shelter", "housing", "refugee", "food bank"] },
+          /* Senior-care hands are an elderly-care picture: sharing the
+             word "hands" with a seed-sorting card does not make them a
+             gardening picture. */
+          { img: ["elderly", "senior"],
+            ok: ["elderly", "senior", "seniors", "old age", "retirement", "grandparent", "grandmother", "grandfather", "care home", "aging", "ageing"] },
+          { img: ["ice cream", "icecream"],
+            ok: ["ice cream", "icecream", "dessert", "sweet", "gelato", "sundae", "cone"] },
+          { img: ["handwashing", "handwash", "hygiene"],
+            ok: ["handwashing", "handwash", "hygiene", "soap", "wash", "washing", "sanitizer", "germs", "virus", "health"] },
+          { img: ["lemonade"],
+            ok: ["lemonade", "lemon", "lemons", "drink", "drinks", "beverage", "refreshment"] },
+          { img: ["easter"],
+            ok: ["easter", "egg hunt", "bunny", "resurrection", "lent"] },
+          { img: ["watermelon", "melon"],
+            ok: ["watermelon", "melon"] },
+          { img: ["sleep", "sleeping"],
+            ok: ["sleep", "sleeping", "bed", "bedtime", "dream", "dreams", "nap", "insomnia", "pillow", "duvet"] },
+          { img: ["selfie"],
+            ok: ["selfie", "social media", "influencer", "vlog", "vlogging", "content creator", "recording"] },
+          /* Domestic pets are subjects, not scenery: a golden retriever
+             may not illustrate a barley field just because the card says
+             "golden" and "field" — a pet photo needs a card that speaks
+             of animals or pets. (Checked before the wider animal rule
+             below, whose habitat words would otherwise let it through.) */
+          { img: ["dog", "puppy", "cat", "kitten", "retriever"],
+            ok: ["dog", "dogs", "puppy", "cat", "cats", "kitten", "pet", "pets", "animal", "animals", "wildlife"] },
+          /* One festival's sacred imagery is not another festival's
+             generic: a menorah is not a Diwali candle, and Ramadan / Eid
+             scenes are not interchangeable with Hindu festival scenes. */
+          { img: ["hanukkah", "menorah"],
+            ok: ["hanukkah", "menorah", "chanukah", "jewish", "dreidel", "passover", "seder", "shabbat"] },
+          { img: ["eid", "ramadan"],
+            ok: ["eid", "ramadan", "muslim", "islamic", "iftar", "mosque", "quran"] },
+          { img: ["diwali"],
+            ok: ["diwali", "hindu", "india", "indian", "diya", "rangoli", "holi", "durga", "ganesh", "temple", "deepavali"] },
+          { img: ["holi"],
+            ok: ["holi", "india", "indian", "hindu", "rangoli", "diwali", "powder", "colours", "colors"] },
+          /* A named animal is a specific subject, not a generic: a
+             butterfly, hedgehog or deer photo may only illustrate a card
+             whose own words ask for animals, wildlife or the outdoors —
+             never a wedding table setting that merely shares the run's
+             words "garden" and "flowers" with its tags. */
+          { img: ["butterfly", "hedgehog", "deer", "pig", "goat", "giraffe", "elephant", "cat", "dog", "puppy", "kitten", "bird", "birds", "fish", "turtle", "frog", "rabbit", "fox", "owl", "bear", "lion", "tiger", "monkey", "penguin", "duck", "chicken", "cow", "horse", "sheep", "bee", "bees", "ladybug", "flamingo", "flamingos"],
+            ok: ["butterfly", "hedgehog", "deer", "pig", "goat", "giraffe", "elephant", "cat", "dog", "puppy", "kitten", "bird", "birds", "fish", "turtle", "frog", "rabbit", "fox", "owl", "bear", "lion", "tiger", "monkey", "penguin", "duck", "chicken", "cow", "horse", "sheep", "bee", "bees", "ladybug", "wildlife", "nature", "animal", "animals", "pet", "pets", "zoo", "safari", "insect", "insects", "forest", "woodland", "meadow", "field", "prairie", "garden", "park", "outdoor", "outdoors", "farm"] }
+        ];
+        function hasWord(text, w) { return new RegExp("(^|[^a-z])" + w + "([^a-z]|$)", "i").test(text); }
+        function domainBlocked(oi, idx) {
+          var tags = EV_LIB[idx].t, words = run.topic + " " + run.opportunities[oi].title;
+          for (var d = 0; d < OFF_DOMAINS.length; d++) {
+            var dom = OFF_DOMAINS[d], hit = false, allowed = false, i;
+            for (i = 0; i < dom.img.length; i++) if (hasWord(tags, dom.img[i])) { hit = true; break; }
+            if (!hit) continue;
+            for (i = 0; i < dom.ok.length; i++) if (hasWord(words, dom.ok[i])) { allowed = true; break; }
+            if (!allowed) return true;
+          }
+          return false;
         }
         /* Visual series: batches of near-identical photos share one filename
            stem AND one tag string (autumnpath2-01…06 "autumn forest path",
@@ -4654,14 +4937,21 @@
           return found;
         }
         var imgSeasons = EV_LIB.map(function (e) { return seasonsOf(e.t); });
-        var runSeasons = seasonsOf(run.topic + " " + run.opportunities.map(function (o) { return o.title; }).join(" "));
+        /* A season counts as "asked for" only by the run's TOPIC or by the
+           card's OWN title — never by a different card in the same run. The
+           old run-wide set let one card's word "winter" unlock snow photos
+           for every other card, so autumn seed cards were dealt winter
+           landscapes while their own season's pictures sat unused. */
+        var topicSeasons = seasonsOf(run.topic);
+        var runSeasons = topicSeasons;
         var oppSeasons = run.opportunities.map(function (o) { return seasonsOf(run.topic + " " + o.title); });
         function seasonConflict(oi, idx) {
           var is = imgSeasons[idx];
           if (!Object.keys(is).length) return false;
-          for (var g in is) { if (oppSeasons[oi][g] || runSeasons[g]) return false; }
-          /* none of this photo's seasons is asked for anywhere in the run */
-          if (!Object.keys(runSeasons).length && !is.winter) return false; /* seasonless run: only snow is gated */
+          for (var g in is) { if (oppSeasons[oi][g] || topicSeasons[g]) return false; }
+          /* neither the topic nor this card asks for any season at all:
+             only snow is gated, everything else stays available */
+          if (!Object.keys(topicSeasons).length && !Object.keys(oppSeasons[oi]).length && !is.winter) return false;
           return true;
         }
         var bestTitle = run.opportunities.map(function (o, oi) {
@@ -4680,6 +4970,7 @@
             var f = EV_LIB[p[2]].f;
             if (res[p[1]] !== undefined || used[f]) return;
             if (EV_HARD.test(EV_LIB[p[2]].t) && !hardQ[p[1]]) return;
+            if (domainBlocked(p[1], p[2])) return;
             if (seasonConflict(p[1], p[2])) return;
             var sk = seriesKey(p[2]);
             /* series cap — waived when this picture is genuinely among the
@@ -4689,46 +4980,130 @@
             res[p[1]] = f; used[f] = 1; seriesUsed[sk] = (seriesUsed[sk] || 0) + 1;
           });
         }
-        /* Pass 1 — the opportunity's own title leads; the run topic only
-           breaks ties. (The old order multiplied the topic score by 100, so
-           the topic's scenery — for "Seed Gathering", alias-expanded to
-           "forest autumn woodland" — was dealt to nearly every card,
-           whatever the card's own concept said.) */
+        /* Pass 1 — the opportunity's own title leads, and a photo only earns
+           a card by matching at least TWO of the title's own words (hits).
+           A single shared word is exactly how the famous mismatches
+           happened: "grass" alone dealt a tennis player to a prairie
+           ecology card, and "vector" alone dealt a Halloween ghost to a
+           botany chart. The run topic no longer admits a photo by itself —
+           it only breaks ties inside pairVal. */
         var p1 = [];
         run.opportunities.forEach(function (o, oi) {
           EV_LIB.forEach(function (e, idx) {
-            if (rawSc[oi][idx][0] >= 1.0 || aliSc[oi][idx][0] >= 1.0 || (topicSc[idx] >= 1.2 && rawSc[oi][idx][0] > 0))
+            if (rawSc[oi][idx][2] >= 2 && rawSc[oi][idx][0] >= 1.0)
               p1.push([pairVal(oi, idx), oi, idx]);
           });
         });
         deal(p1, 2);
+        /* Pass 2 — the same two-word rule with a looser series cap and
+           score floor, for cards the first pass could not fill. */
         var p2 = [];
         run.opportunities.forEach(function (o, oi) {
           if (res[oi] !== undefined) return;
           EV_LIB.forEach(function (e, idx) {
-            var v = pairVal(oi, idx);
-            if (v >= 25) p2.push([v, oi, idx]);
+            if (rawSc[oi][idx][2] >= 2) {
+              var v = pairVal(oi, idx);
+              if (v >= 20) p2.push([v, oi, idx]);
+            }
           });
         });
         deal(p2, 3);
+        /* Pass 3 — on-theme generic fallback. When the library holds no true
+           two-word match for a card, a general picture of the run's own
+           world beats a specific picture from a wrong one: still-unused,
+           fully gated photos are scored by the run TOPIC's own words, then
+           by sharing the run's season, then by whatever title score is
+           left. (For "Seed Gathering Season" this is what deals autumn
+           field / forest / garden shots to the botany cards instead of a
+           tennis court, a milk jug or an optician's shop.) */
+        /* The fallback's notion of "this search's world" is the run's
+           THEME: the topic's own words plus the words at least two cards
+           share. It is deliberately NOT the pooled vocabulary of every
+           title: pooling let one card's words ("volunteers" + "packing",
+           from a single seed-swap title) qualify charity food-packing
+           photos for four unrelated botany cards in the same run. A word
+           that occurs in exactly one title belongs to that card alone —
+           it may speak for its own card through `related` / rawSc below,
+           never for the whole run. */
+        var themeSet = {};
+        qtTopic.forEach(function (t) { themeSet[t] = 1; });
+        var titleFreq = {};
+        run.opportunities.forEach(function (o) {
+          dedupeToks(o.title).forEach(function (t) { titleFreq[t] = (titleFreq[t] || 0) + 1; });
+        });
+        Object.keys(titleFreq).forEach(function (t) { if (titleFreq[t] >= 2) themeSet[t] = 1; });
+        var runQt = Object.keys(themeSet).filter(function (t) { return !MEDIUM_TOKENS[t]; });
+        var runSc = EV_LIB.map(function (e, i) { return oppPair(runQt, i); });
+        run.opportunities.forEach(function (o, oi) {
+          if (res[oi] !== undefined) return;
+          var best = null;
+          EV_LIB.forEach(function (e, idx) {
+            if (used[e.f]) return;
+            if (EV_HARD.test(e.t) && !hardQ[oi]) return;
+            if (domainBlocked(oi, idx)) return;
+            if (seasonConflict(oi, idx)) return;
+            /* The fallback obeys a series cap too: without one, a single
+               near-identical series (four charity-volunteer shots, four
+               tractor shots) could flood every unfilled card in the run
+               even when each individual pick looked defensible. The cap
+               never applies to a series that IS this run's own subject
+               (it scores against the topic's own words): a wedding run
+               must be allowed to fill its grid from the wedding series,
+               not be pushed onto ribbons and market stalls instead. */
+            if ((seriesUsed[seriesKey(idx)] || 0) >= 3 && topicSc[idx] <= 0) return;
+            var seasonShare = 0, is = imgSeasons[idx];
+            for (var g in is) if (oppSeasons[oi][g] || topicSeasons[g]) seasonShare = 1;
+            /* A fallback picture must still be defensibly related to THIS
+               search: sharing a topic word, one of the card's own words, or
+               the card's own season earns a large bonus, and sharing the
+               run's wider vocabulary earns an even larger one — so a related
+               generic always beats a specific picture from another world
+               that merely scores on one stray word. */
+            /* A picture OF the run's topic itself is the strongest fallback
+               of all (a wedding photo for a wedding card whose title never
+               repeats the word "wedding"), then a card-word or season
+               match, then the run's wider vocabulary. */
+            var related = topicSc[idx] > 0 ? 70 : ((rawSc[oi][idx][2] >= 1 || seasonShare) ? 50 : 0);
+            var runRel = runSc[idx][2] >= 2 ? 60 : (runSc[idx][2] === 1 ? 25 : 0);
+            /* Primary-subject bonus: a picture whose MAIN subject (its
+               first tag word — farmer, gardening, flowers) is part of this
+               run's world beats a picture where the shared words are only
+               background details (kites that happen to fly at a harvest
+               festival, for a barley-field card). */
+            var firstTok = Object.keys(EV_TAGS[idx])[0];
+            var primaryBonus = (firstTok && runQt.some(function (q) { return oppMatch(firstTok, q); })) ? 30 : 0;
+            /* The relation tier dominates the raw score, and inside a tier
+               MORE shared run words win: a gardening picture sharing three
+               of this run's words must beat a kite picture sharing two rare
+               ones ("sky", "harvest") on weight alone. */
+            var v = Math.max(related, runRel) * 10 + runSc[idx][2] * 20 + runSc[idx][0] * 0.3 + primaryBonus + topicSc[idx] * 10 + topicHits[idx] * 4 + seasonShare * 8 + rawSc[oi][idx][0];
+            if (!best || v > best[0] || (v === best[0] && e.f < best[1])) best = [v, e.f, idx];
+          });
+          if (best) {
+            res[oi] = best[1]; used[best[1]] = 1;
+            var sk3 = seriesKey(best[2]);
+            seriesUsed[sk3] = (seriesUsed[sk3] || 0) + 1;
+          }
+        });
         /* Last resort: best remaining picture by the same title-led score,
-           season gate still on. Only when nothing ungated is left may a
+           every gate still on. Only when nothing ungated is left may a
            gated picture be used, and only when the whole library is
            exhausted may a picture repeat within the run. */
         run.opportunities.forEach(function (o, oi) {
           if (res[oi] !== undefined) return;
-          function pick(ignoreSeason, allowUsed, ignoreHard) {
+          function pick(ignoreSeason, allowUsed, ignoreHard, ignoreDomain) {
             var best = null;
             EV_LIB.forEach(function (e, idx) {
               if (!allowUsed && used[e.f]) return;
               if (!ignoreHard && EV_HARD.test(e.t) && !hardQ[oi]) return;
+              if (!ignoreDomain && domainBlocked(oi, idx)) return;
               if (!ignoreSeason && seasonConflict(oi, idx)) return;
               var v = pairVal(oi, idx);
               if (!best || v > best[0] || (v === best[0] && e.f < best[1])) best = [v, e.f];
             });
             return best;
           }
-          var b = pick(false, false, false) || pick(true, false, false) || pick(true, true, true);
+          var b = pick(false, false, false, false) || pick(true, false, false, false) || pick(true, true, true, true);
           res[oi] = b[1]; used[b[1]] = 1;
         });
         run.opportunities.forEach(function (o, oi) { o.img = res[oi]; });
@@ -5114,7 +5489,7 @@
           '      "negative_prompt": "comma-separated list of things to exclude, always including brand logos, trademarks, watermarks and copyrighted characters",',
           '      "technical": { "aspect_ratio": "16:9", "midjourney_flags": "--ar 16:9 --style raw --v 6", "sdxl_flux_guidance": { "cfg_scale": 7, "steps": 30, "sampler": "DPM++ 2M Karras" } },',
           '      "metadata": { "title": "short asset title", "description": "1-2 sentences", "tags": ["8-12 search tags"], "category": "..." } }',
-          '    Adapt the skeleton per type: DESIGN prompts use illustration / vector / graphic-design mediums and their typography block is a working design element (generic placeholder headline text only — never a brand name). IMAGE prompts are photographic (medium: digital photograph, real camera and lens language). VIDEO prompts put the motion in the prose and in composition (subject movement and camera movement), and their technical block is { "aspect_ratio": "16:9", "duration_seconds": 8, "fps": 24, "camera_movement": "...", "motion_guidance": "..." } instead of the still-image guidance. Each of the 3 prompts of a type is a different treatment of the concept.'
+          '    Adapt the skeleton per type: DESIGN prompts use illustration / vector / graphic-design mediums and their typography block is a working design element (generic placeholder headline text only — never a brand name). IMAGE prompts are photographic (medium: digital photograph, real camera and lens language) and each describes ONE single frozen instant — a still frame, no movement, no camera travel, no time passing. VIDEO prompts are MOTION scripts, the opposite of a still: the prose opens with the action already moving, states exactly how the SUBJECT moves, exactly how the CAMERA moves, walks the shot through time (how it opens, what happens in the middle, how it ends) and sets the duration; the composition block describes the moving shot (subject movement and camera movement), and the technical block is { "aspect_ratio": "16:9", "duration_seconds": 8, "fps": 24, "camera_movement": "...", "motion_guidance": "..." } instead of the still-image guidance. Still-photo language (a frozen moment, a posed subject, a single captured instant) is FORBIDDEN in a video prompt. Each of the 3 prompts of a type is a different treatment of the concept.'
         ];
       }
       /* Prompts are written in small batches — one call per few opportunities — so
@@ -5145,6 +5520,7 @@
           "  } ]",
           "}",
           "Rules: every prompt is finished and ready to paste into design, image and video tools; the 3 prompts of one type are three different treatments of the concept, and the treatments for one opportunity must stay clearly different from the treatments for every other opportunity in this run.",
+          "VIDEO IS MOTION, NEVER A STILL (strict): a video prompt must never be the matching image or design prompt reworded, and must not describe a scene that would work unchanged as a still photograph. Every video prompt is built on movement: (1) the subject performs a visible action that changes over the shot, (2) the camera moves (push-in, glide, orbit, tracking shot, tilt) — or the shot is locked off and the motion inside the frame is unmistakably temporal, (3) the prose walks the shot through time — how it opens, what happens in the middle, how it ends — and (4) technical.duration_seconds is always set. If a draft video prompt reads like a photo caption, rewrite it as motion before returning it. IMAGE prompts are the exact opposite: one single frozen instant, no movement, no camera travel, no duration. DESIGN, IMAGE and VIDEO prompts for the same opportunity share the concept only — never the same scene description, the same wording or the same treatment.",
           "ADOBE STOCK — NO IP, NO BRANDS (strict): no title or prompt may name or depict any brand, company, logo, trademark, famous product, celebrity, public figure, film / book / game title, or copyrighted character or design. Describe everything generically instead (for example 'a red sports car', never a car brand; 'a smiling woman in her thirties', never a celebrity's name; 'a generic smartphone with a blank screen', never a product name). No readable text, words, labels or logos inside any visual.",
           "ADOBE STOCK — NO SIMILAR CONTENT (strict): Adobe Stock rejects submissions that are too similar to content already on the marketplace. Every prompt set must be clearly different from every other one — different concept, scene, setting, composition, camera angle, subjects, props and mood. No near-duplicates, and no same scene merely reworded. This also applies inside one opportunity: its 3 design, 3 image and 3 video prompts must each describe a distinct treatment (different framing, moment, setting detail or camera move), never the same shot paraphrased.",
           "FRESH AND UNIQUE EVERY RUN (strict): this topic may be researched many times, by many different users. Every run must be original — new scenes, locations, times, people, activities, compositions, camera angles and wording each time — so no prompt is ever repeated word-for-word, or even in concept, from an earlier run, and no two users receive the same prompts. If a concept feels like the obvious standard treatment of this topic, replace it with a fresher angle."
@@ -5497,7 +5873,7 @@
           $("pipeTitle").textContent = "Done — brief ready";
           logLine("ALL CHECKS PASS", "ok");
           logLine("fresh research received via Key " + doneRes.keyNo + (doneRes.model && doneRes.model !== GEMINI_MODELS[0] ? " (" + doneRes.model + ")" : ""), "ok");
-          RUNS.unshift(run); renderRuns(); renderSheet();
+          RUNS.unshift(run); saveUserRuns(); renderRuns(); renderSheet();
           restoreBtn();
           setTimeout(function(){ openRun(run); toast("Run " + run.id + " complete — fresh from Gemini (Key " + doneRes.keyNo + ")"); }, 450);
         }).catch(function(err){
@@ -5551,6 +5927,33 @@
       renderRuns();
       renderSheet();
       renderDays();
+      /* Reopen the app exactly as the user left it before a refresh: the
+         same run (restored above from sri_user_runs), the same screen, the
+         same opportunity and the same prompt tab. With nothing saved, the
+         app simply opens on New Research as always. */
+      (function restoreUiState(){
+        var st = null;
+        try { st = JSON.parse(localStorage.getItem(LS_UI) || "null"); } catch (e) {}
+        if (!st) return;
+        var run = st.run ? RUNS.filter(function(r){ return r.id === st.run; })[0] : null;
+        if (run){
+          openRun(run);
+          if (st.view === "opp"){
+            var oi = Math.max(0, Math.min(run.opportunities.length - 1, st.opp || 0));
+            openOpp(oi);
+            if (st.tab && st.tab !== "design"){
+              currentTab = st.tab;
+              document.querySelectorAll("#promptTabs button").forEach(function(b){ b.classList.toggle("on", b.getAttribute("data-tab") === st.tab); });
+              renderPrompts();
+              saveUiState();
+            }
+          } else if (st.view && st.view !== "brief" && $("view-" + st.view)){
+            show(st.view);
+          }
+        } else if (st.view && st.view !== "brief" && st.view !== "opps" && st.view !== "opp" && st.view !== "export" && $("view-" + st.view)){
+          show(st.view);
+        }
+      })();
     </script>
   </body>
 </html>
