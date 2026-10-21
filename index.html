@@ -1328,7 +1328,8 @@
         $("labelTrack").innerHTML = labTile + labTile + labTile;
       })();
 
-      /* pin labels fade out before they can reach the hero headline/paragraph, then fade back once clear — names stay fully readable everywhere else on the map */
+      /* pin labels fade out before they can reach the hero headline/paragraph, then fade back once clear — names stay fully readable everywhere else on the map.
+         On narrow screens (same ≤820px breakpoint as the mobile layout) a label also fades out before it can reach the hero's left/right edges, so a name is never half-cut mid-word at the side of the hero; on desktop widths the edge behaviour is unchanged. */
       (function labelFade(){
         var hero = document.querySelector(".hero");
         var h1 = hero ? hero.querySelector("h1") : null;
@@ -1336,6 +1337,7 @@
         var labs = Array.prototype.slice.call(document.querySelectorAll(".pinlab span"));
         if (!hero || !h1 || !labs.length) return;
         var PAD = 14; /* keep names this many px clear of the text */
+        var EDGE = 24; /* on narrow screens, keep names this many px clear of the hero's side edges — the drift moves only a few px during the .45s fade, so a name is fully gone before any letter can touch the edge */
         function hits(r, t){
           return r.left < t.right + PAD && r.right > t.left - PAD && r.top < t.bottom + PAD && r.bottom > t.top - PAD;
         }
@@ -1343,9 +1345,12 @@
           if (hero.offsetParent !== null){ /* only while the home view is on screen */
             var boxes = [h1.getBoundingClientRect()];
             if (para) boxes.push(para.getBoundingClientRect());
+            var heroR = hero.getBoundingClientRect();
+            var narrow = window.innerWidth <= 820;
             for (var i = 0; i < labs.length; i++){
               var r = labs[i].getBoundingClientRect(), hide = false;
               for (var j = 0; j < boxes.length; j++){ if (hits(r, boxes[j])){ hide = true; break; } }
+              if (!hide && narrow && (r.left < heroR.left + EDGE || r.right > heroR.right - EDGE)) hide = true;
               labs[i].classList.toggle("fade", hide);
             }
           }
@@ -1544,12 +1549,16 @@
       document.addEventListener("click", function(e){
         var c = e.target.closest("[data-copy]"); if (!c) return;
         var txt = c.getAttribute("data-copy");
-        if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){ toast("Prompt copied"); }, function(){ toast("Copy failed"); }); }
-        else {
-          var ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select();
-          try { document.execCommand("copy"); toast("Prompt copied"); } catch (err) { toast("Copy failed"); }
+        function legacyCopy(){
+          var ta = document.createElement("textarea"); ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
+          var ok = false;
+          try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
           document.body.removeChild(ta);
+          toast(ok ? "Prompt copied" : "Copy failed");
         }
+        if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){ toast("Prompt copied"); }, function(){ legacyCopy(); }); }
+        else { legacyCopy(); }
       });
 
       /* ================= RUN GENERATION ================= */
@@ -2840,8 +2849,10 @@
           var ta = document.createElement("textarea");
           ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
           document.body.appendChild(ta); ta.select();
-          try { document.execCommand("copy"); } catch (e) {}
-          ta.remove(); done();
+          var ok = false;
+          try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+          ta.remove();
+          if (ok) { done(); } else { toast("Copy failed — select the text and copy it manually"); }
         }
       }
       function csvCell(v) { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
