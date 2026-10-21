@@ -1115,6 +1115,42 @@
       var PJ_CONTRAST = ["soft, low contrast with lifted shadows", "balanced contrast, true-to-life tones", "rich contrast with deep shadows and bright highlights"];
       var PJ_ASPECT = ["16:9", "4:5", "1:1"];
       var PJ_CAMMOVE = ["slow push-in toward the subject", "gentle lateral gimbal glide", "locked-off tripod shot with natural in-frame motion"];
+      var PJ_PALETTE_NIGHT = ["#0B1D2E", "#1E3A52", "#7FB3D5", "#E8DCC3", "#050A12"];
+      var PJ_PALETTE_SUNSET = ["#FDF0EC", "#E8A08A", "#E3B34C", "#7A2E14", "#FFF3D6"];
+      var PJ_PALETTE_WINTER = ["#EDF5FA", "#BFDCEB", "#5B8DB8", "#22384A", "#FFFFFF"];
+      /* Scene profile read straight from the topic + title words, so the
+         locally built fields (palette, lighting, framing, lens, camera
+         move) FIT the scene the title actually describes — a night title
+         never gets midday window light, a macro title never gets a wide
+         establishing shot, an aerial title never gets an eye-level angle.
+         This is the local half of the ACCURACY & LOGIC rule. */
+      function pjSceneProfile(topic, opp){
+        var txt = (String(topic || "") + " " + String((opp && opp.title) || "")).toLowerCase();
+        function has(re){ return re.test(txt); }
+        return {
+          isNight: has(/\b(night|midnight|evening|dusk|starry|moonlit|after dark|nocturne|lantern|fireflies|bonfire)\b/),
+          isSunset: has(/\b(sunset|golden hour|golden-hour|dawn|sunrise|twilight)\b/),
+          isMacro: has(/\b(macro|close-up|close up|extreme close|microscopic)\b/),
+          isAerial: has(/\b(aerial|drone|top-down|top down|overhead|bird'?s[- ]eye|from above)\b/),
+          isIndoor: has(/\b(indoor|interior|kitchen|bedroom|living room|office|studio|classroom|cafe|restaurant|home|room|desk|tabletop|workshop|library|store|shop)\b/),
+          isOutdoor: has(/\b(outdoor|garden|forest|beach|mountain|field|street|park|meadow|prairie|landscape|lake|river|farm|harvest|plant|plants|pod|pods|flower|flowers|leaf|leaves|tree|trees|grass|botanical|wildflower|wildflowers|seedling|seedlings|wheat|corn|lavender|sunflower|sunflowers|vineyard|orchard|porch|balcony|terrace|yard|backyard|milkweed)\b/),
+          isWinter: has(/\b(winter|snow|christmas|frost|frozen|holiday)\b/)
+        };
+      }
+      function pjCamCore(s){
+        s = String(s || "").toLowerCase();
+        if (/push-in|push in/.test(s)) return "push-in";
+        if (/locked-off|locked off|tripod/.test(s)) return "locked-off";
+        if (/glide|gimbal/.test(s)) return "glide";
+        if (/track/.test(s)) return "track";
+        if (/orbit/.test(s)) return "orbit";
+        if (/tilt/.test(s)) return "tilt";
+        if (/drift/.test(s)) return "drift";
+        if (/pan/.test(s)) return "pan";
+        if (/zoom/.test(s)) return "zoom";
+        if (/dolly/.test(s)) return "dolly";
+        return "";
+      }
       function pjTags(topic, opp){
         var seen = {}, tags = [];
         (topic + " " + opp.title).toLowerCase().split(/[^a-z0-9]+/).forEach(function(w){
@@ -1167,6 +1203,11 @@
           o.prompt += " Presented as a moving shot, not a still frame: the subject stays in continuous natural motion while the camera makes a " + mv + ", the action unfolding over " + dur + " seconds.";
         if (needsProgression)
           o.prompt += " The shot opens with the action already under way, develops through the middle seconds as the subject's movement builds, and ends as the action completes on a clean closing frame.";
+        /* Accuracy: the camera move named in technical must be the move the
+           prose describes — if the prose never names it, state it plainly. */
+        var camCore = pjCamCore(mv);
+        if (camCore && o.prompt.toLowerCase().indexOf(camCore) === -1 && !needsMotion)
+          o.prompt += " Throughout, the camera makes a " + mv + ".";
         if (o.composition && typeof o.composition === "object" && !/mov|camera/i.test(o.composition.framing || "")) o.composition.framing = String(o.composition.framing || "") + " — framed for a moving shot: subject in continuous action, camera " + mv;
         if (o.technical && typeof o.technical === "object"){
           if (!o.technical.duration_seconds) o.technical.duration_seconds = dur;
@@ -1176,9 +1217,36 @@
       }
       function pjBuild(type, prose, topic, opp, n, src){
         var i = (n - 1) % 3;
+        var prof = pjSceneProfile(topic, opp);
         var pal = PJ_PALETTES[(n + opp.title.length) % PJ_PALETTES.length];
+        if (prof.isNight) pal = PJ_PALETTE_NIGHT;
+        else if (prof.isSunset) pal = PJ_PALETTE_SUNSET;
+        else if (prof.isWinter) pal = PJ_PALETTE_WINTER;
         var t = opp.title;
-        var lighting = { lighting_type: PJ_LIGHT[i], lighting_direction: PJ_LIGHTDIR[i], color_palette: pal, contrast_and_tonality: PJ_CONTRAST[i] };
+        /* Scene-fitted defaults: every derived field below is chosen from
+           the title's own words, so lighting, framing, lens and camera
+           move agree with the scene the prompt text describes. */
+        var vFraming = PJ_FRAMING[i], vAngle = PJ_ANGLE[i], vDof = PJ_DOF[i], vFocal = PJ_FOCAL[i];
+        var vLight = PJ_LIGHT[i], vLightDir = PJ_LIGHTDIR[i], vContrast = PJ_CONTRAST[i], vCamMove = PJ_CAMMOVE[i];
+        if (prof.isMacro){
+          vFraming = "extreme close-up macro detail shot"; vAngle = "eye-level camera at close working distance";
+          vDof = "very shallow depth of field, f/2.8, fine detail sharp"; vFocal = "100mm macro lens";
+          vCamMove = "very slow push-in toward the detail";
+        } else if (prof.isAerial){
+          vFraming = "wide aerial establishing shot"; vAngle = "top-down high-angle aerial camera looking down";
+          vDof = "deep focus, f/8, everything sharp"; vFocal = "24mm wide lens";
+          vCamMove = "slow forward aerial drift";
+        }
+        if (prof.isNight){
+          vLight = "soft moonlight with warm practical light accents"; vLightDir = "low moonlight from behind-left with gentle frontal fill"; vContrast = "rich contrast with deep shadows and soft highlights";
+        } else if (prof.isSunset){
+          vLight = "warm golden-hour sunlight"; vContrast = "warm balanced contrast, true-to-life tones";
+        } else if (prof.isIndoor){
+          vLight = "soft natural window light";
+        } else if (prof.isOutdoor){
+          vLight = "bright diffused daylight"; if (vLightDir.indexOf("window") > -1) vLightDir = PJ_LIGHTDIR[i];
+        }
+        var lighting = { lighting_type: vLight, lighting_direction: vLightDir, color_palette: pal, contrast_and_tonality: vContrast };
         var meta = { title: t, description: String(opp.why || "").slice(0, 200), tags: pjTags(topic, opp), category: "" };
         var base;
         if (type === "design"){
@@ -1186,9 +1254,9 @@
           base = {
             prompt: prose || ("Design asset brief: " + t + " — a clean commercial design composition on the theme of " + topic + ", built for headline placement and agency upload."),
             style: { medium: "vector illustration / graphic design asset", artistic_style: "flat modern illustration with subtle grain", aesthetic: "clean, minimal, print-ready", render_or_film: "layered vector shapes, scalable at any size" },
-            subject: { primary_subject: t, secondary_elements: "supporting props and seasonal details from the brief, arranged around the main subject", silhouette_and_proportions: "bold simple silhouettes; the main subject occupies about 40% of the frame" },
-            composition: { framing: PJ_FRAMING[i], camera_angle: "straight-on design view", depth_of_field: "flat design depth, all elements crisp", focal_length: "n/a — flat design", rule_of_thirds_or_symmetry: PJ_COMP[i] },
-            lighting_and_color: { lighting_type: "flat even design lighting with soft shape shadows", lighting_direction: PJ_LIGHTDIR[i], color_palette: pal, contrast_and_tonality: PJ_CONTRAST[i] },
+            subject: { primary_subject: t, secondary_elements: "supporting props and details that belong to the main subject's own activity, arranged around the main subject", silhouette_and_proportions: "bold simple silhouettes; the main subject occupies about 40% of the frame" },
+            composition: { framing: vFraming, camera_angle: "straight-on design view", depth_of_field: "flat design depth, all elements crisp", focal_length: "n/a — flat design", rule_of_thirds_or_symmetry: PJ_COMP[i] },
+            lighting_and_color: { lighting_type: "flat even design lighting with soft shape shadows", lighting_direction: vLightDir, color_palette: pal, contrast_and_tonality: vContrast },
             typography: { has_text: true, exact_text: "generic placeholder headline about " + topic.toLowerCase(), font_style: "clean modern sans-serif, bold display weight, generous letter spacing" },
             negative_prompt: PJ_NEG,
             technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras" } },
@@ -1197,14 +1265,14 @@
         } else if (type === "video"){
           meta.category = "Video · " + topic;
           base = {
-            prompt: prose || ("Stock video clip, " + [6, 8, 10][i] + " seconds: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + PJ_CAMMOVE[i] + "; midway the action develops and the framing draws closer to the key detail, and the clip ends as the action completes and the subject settles into a clean closing frame. One continuous take, no cuts, clean frame edges kept clear for overlay text."),
+            prompt: prose || ("Stock video clip, " + [6, 8, 10][i] + " seconds: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + vCamMove + "; midway the action develops and the framing draws closer to the key detail, and the clip ends as the action completes and the subject settles into a clean closing frame. One continuous take, no cuts, clean frame edges kept clear for overlay text."),
             style: { medium: "video footage", artistic_style: "cinematic realism", aesthetic: "natural, authentic, commercial stock quality", render_or_film: "4K video, fine natural grain, soft highlight roll-off" },
             subject: { primary_subject: t, secondary_elements: "environment and props that support the action, moving naturally in frame", silhouette_and_proportions: "subject clearly readable at thumbnail size; realistic proportions throughout the move" },
-            composition: { framing: PJ_FRAMING[i], camera_angle: PJ_ANGLE[i], depth_of_field: PJ_DOF[i], focal_length: PJ_FOCAL[i], rule_of_thirds_or_symmetry: PJ_COMP[i] },
+            composition: { framing: vFraming, camera_angle: vAngle, depth_of_field: vDof, focal_length: vFocal, rule_of_thirds_or_symmetry: PJ_COMP[i] },
             lighting_and_color: lighting,
             typography: { has_text: false, exact_text: "", font_style: "" },
             negative_prompt: PJ_NEG + ", camera shake, jump cuts, flicker, warped motion",
-            technical: { aspect_ratio: "16:9", duration_seconds: [6, 8, 10][i], fps: 24, camera_movement: PJ_CAMMOVE[i], motion_guidance: "subject in continuous action from the opening frame to the closing frame; the shot opens in motion, develops midway and ends as the action completes; one continuous take, no cuts, no static hold" },
+            technical: { aspect_ratio: "16:9", duration_seconds: [6, 8, 10][i], fps: 24, camera_movement: vCamMove, motion_guidance: "subject in continuous action from the opening frame to the closing frame; the shot opens in motion, develops midway and ends as the action completes; one continuous take, no cuts, no static hold" },
             metadata: meta
           };
         } else {
@@ -1212,8 +1280,8 @@
           base = {
             prompt: prose || ("Photorealistic stock photo: " + t + ", authentic people and environment, natural expressions, commercial licensing quality, high detail."),
             style: { medium: "digital photograph", artistic_style: "photorealistic editorial", aesthetic: "natural, authentic, commercial stock quality", render_or_film: "full-frame digital capture, fine film-grain finish" },
-            subject: { primary_subject: t, secondary_elements: "supporting props and environment described in the prompt, nothing branded", silhouette_and_proportions: "realistic proportions; subject clearly readable at thumbnail size" },
-            composition: { framing: PJ_FRAMING[i], camera_angle: PJ_ANGLE[i], depth_of_field: PJ_DOF[i], focal_length: PJ_FOCAL[i], rule_of_thirds_or_symmetry: PJ_COMP[i] },
+            subject: { primary_subject: t, secondary_elements: "supporting props and environment that belong to the scene's single activity, nothing branded", silhouette_and_proportions: "realistic proportions; subject clearly readable at thumbnail size" },
+            composition: { framing: vFraming, camera_angle: vAngle, depth_of_field: vDof, focal_length: vFocal, rule_of_thirds_or_symmetry: PJ_COMP[i] },
             lighting_and_color: lighting,
             typography: { has_text: false, exact_text: "", font_style: "" },
             negative_prompt: PJ_NEG,
@@ -1242,6 +1310,96 @@
         return out;
       }
 
+      /* ================= ACCURACY VALIDATION (cheap sanity gate) =================
+         Every live prompt object is checked before it is accepted: all 9
+         fields present, the scene tied to THIS opportunity's title, the
+         palette a real hex array, the metadata describing this scene, the
+         typography consistent, and — for video — real motion, a named
+         camera move that the prose actually describes, a start→middle→end
+         progression and a sensible duration. A prompt that fails is not
+         shipped illogical: it is replaced by the locally built fallback
+         prompt for the same opportunity and type (pjString with no source
+         override — the same builder the local fallback path uses). */
+      var PJ_FIELDS = ["prompt", "style", "subject", "composition", "lighting_and_color", "typography", "negative_prompt", "technical", "metadata"];
+      var PJ_NUMWORDS = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10 };
+      function pjTitleTokens(title){
+        var out = [];
+        String(title || "").toLowerCase().split(/[^a-z0-9]+/).forEach(function(w){
+          if (w.length > 3) out.push(w.replace(/(ing|es|s)$/, ""));
+        });
+        return out;
+      }
+      function pjCountMap(text){
+        var map = {}, re = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(people|persons|person|women|woman|men|man|children|child|kids|objects|items|candles|pumpkins|flowers|books|cups|chairs|dogs|cats|birds)\b/gi, m;
+        text = String(text || "").toLowerCase();
+        while ((m = re.exec(text)) !== null){
+          var num = /^\d+$/.test(m[1]) ? parseInt(m[1], 10) : PJ_NUMWORDS[m[1]];
+          var noun = m[2].replace(/s$/, "");
+          if (map[noun] === undefined) map[noun] = num;
+        }
+        return map;
+      }
+      function pjValidatePrompt(o, type, opp){
+        if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+        for (var fi = 0; fi < PJ_FIELDS.length; fi++) if (!(PJ_FIELDS[fi] in o)) return false;
+        if (typeof o.prompt !== "string" || o.prompt.trim().length < 30) return false;
+        if (!o.subject || typeof o.subject.primary_subject !== "string" || !o.subject.primary_subject.trim()) return false;
+        /* Title-scene match: the prompt + subject must name at least one
+           real concept word from this opportunity's own title — nothing
+           imported from another opportunity or topic. */
+        var hay = (o.prompt + " " + o.subject.primary_subject).toLowerCase();
+        var toks = pjTitleTokens(opp && opp.title);
+        if (toks.length && !toks.some(function(tk){ return tk && hay.indexOf(tk) > -1; })) return false;
+        /* Palette must be an array of real hex colours. */
+        var pal = o.lighting_and_color && o.lighting_and_color.color_palette;
+        if (!Array.isArray(pal) || pal.length < 3) return false;
+        for (var pi = 0; pi < pal.length; pi++) if (!/^#[0-9a-fA-F]{6}$/.test(String(pal[pi]))) return false;
+        if (!o.lighting_and_color.lighting_type || !o.lighting_and_color.lighting_direction) return false;
+        /* Metadata describes THIS scene only: title, description, category
+           present and at least 3 non-empty tags. */
+        var md = o.metadata || {};
+        if (!md.title || !String(md.title).trim()) return false;
+        if (!md.description || !String(md.description).trim()) return false;
+        if (!md.category || !String(md.category).trim()) return false;
+        if (!Array.isArray(md.tags) || md.tags.filter(function(x){ return String(x).trim().length > 0; }).length < 3) return false;
+        /* Typography: has_text is true only when exact_text is present. */
+        var ty = o.typography || {};
+        if (ty.has_text === true && (!ty.exact_text || !String(ty.exact_text).trim())) return false;
+        if ((!ty.exact_text || !String(ty.exact_text).trim()) && ty.has_text !== false && type !== "design") return false;
+        /* Counts agree: a counted noun is the same number in the prompt
+           text and in the subject fields. */
+        var cp = pjCountMap(o.prompt), cs = pjCountMap((o.subject.primary_subject || "") + " " + (o.subject.secondary_elements || ""));
+        for (var noun in cp) if (cs[noun] !== undefined && cs[noun] !== cp[noun]) return false;
+        /* Technical accuracy per type. */
+        var tech = o.technical || {}, med = String((o.style && o.style.medium) || ""), foc = String((o.composition && o.composition.focal_length) || "");
+        if (type === "video"){
+          if (typeof tech.duration_seconds !== "number" || tech.duration_seconds < 3 || tech.duration_seconds > 30) return false;
+          if (typeof tech.fps !== "number" || tech.fps < 20 || tech.fps > 60) return false;
+          if (!tech.camera_movement || !String(tech.camera_movement).trim()) return false;
+          if (!tech.motion_guidance || !String(tech.motion_guidance).trim()) return false;
+          if (!PJ_MOTION_RE.test(o.prompt) || !PJ_PROGRESSION_RE.test(o.prompt)) return false;
+          var core = pjCamCore(tech.camera_movement);
+          if (core && o.prompt.toLowerCase().indexOf(core) === -1) return false;
+        } else if (type === "image"){
+          if ("duration_seconds" in tech) return false;
+          if (!/photo/i.test(med) || /vector|illustration/i.test(med)) return false;
+          if (/n\/a/i.test(foc) || !/\d+\s*mm/.test(foc)) return false;
+        } else if (type === "design"){
+          if (!/vector|illustration|design/i.test(med)) return false;
+          if (/\d+\s*mm/.test(foc)) return false;
+        }
+        return true;
+      }
+      /* normPrompts + the accuracy gate: any prompt that fails validation
+         is swapped for the local fallback prompt for that slot. */
+      function pjValidatedNorm(type, arr, topic, opp){
+        return normPrompts(type, arr, topic, opp).map(function(s, idx){
+          var ok = false;
+          try { ok = pjValidatePrompt(JSON.parse(s), type, opp); } catch (e) {}
+          return ok ? s : pjString(type, "", topic, opp, idx + 1, null);
+        });
+      }
+
       function promptsFor(run, opp, idx){
         var t = opp.title, topic = run.topic;
         var keyBase = run.id.toLowerCase() + "-o" + (idx + 1);
@@ -1249,24 +1407,33 @@
         if (opp.prompts && opp.prompts.design && opp.prompts.image && opp.prompts.video){
           return { design: wrap(opp.prompts.design, "design"), image: wrap(opp.prompts.image, "image"), video: wrap(opp.prompts.video, "video") };
         }
+        /* Fallback prose is written to AGREE with the structured fields
+           pjBuild derives for the same slot (same index): it makes no
+           lens, lighting, aspect or camera claim the fields do not also
+           make — the camera move named in each video line is the exact
+           move pjBuild puts in technical.camera_movement. */
+        var prof2 = pjSceneProfile(topic, opp);
+        var fbMove = PJ_CAMMOVE.map(function(m){ return m; });
+        if (prof2.isMacro) fbMove = ["very slow push-in toward the detail", "very slow push-in toward the detail", "very slow push-in toward the detail"];
+        else if (prof2.isAerial) fbMove = ["slow forward aerial drift", "slow forward aerial drift", "slow forward aerial drift"];
         var designProse = [
-          "Design a stock-ready composition: " + t + " — strong focal point in the left third, generous negative space for headline text, warm seasonal palette, no text or logos in frame.",
+          "Design a stock-ready composition: " + t + " — strong focal point in the left third, generous negative space reserved for a generic placeholder headline, palette matched to the scene, no logos in frame.",
           "Create a versatile design asset based on \"" + t + "\": layered depth (foreground prop, mid subject, soft background), balanced symmetry, export-friendly margins on all sides.",
           "Design brief for " + topic + ": hero visual of " + t.toLowerCase() + ", premium editorial style, consistent lighting direction, space at top for title placement, high commercial appeal."
         ];
         var imageProse = [
-          "Photorealistic stock photo: " + t + " — one single frozen instant, shot on 50mm lens, natural window light, authentic candid expressions, shallow depth of field, high detail, commercial licensing quality.",
-          "Editorial photograph: " + t.toLowerCase() + " — a single captured moment frozen in time, real people, real environment, no staged posing, muted warm color grade, copy space on the right side of frame.",
-          "Bright lifestyle image: " + t + " — one still frame only, golden-hour ambience, crisp focus on the main subject, background softly blurred, suitable for web hero banners and social crops (4:5 safe area)."
+          "Photorealistic stock photo: " + t + " — one single frozen instant, authentic detail and the real environment of the scene, crisp focus on the main subject, high detail, commercial licensing quality.",
+          "Editorial photograph: " + t.toLowerCase() + " — a single captured moment frozen in time, the real setting of the scene, no staged posing, centred and balanced framing.",
+          "Lifestyle image: " + t + " — one still frame only, crisp focus on the main subject, high commercial appeal."
         ];
         /* Video prose is authored as motion from the first word — never a
            reworded still: every line names the subject's action over time,
            the camera move, how the shot opens, what happens in the middle,
            how it ends, and its duration. */
         var videoProse = [
-          "6-second stock video: " + t + " — the shot opens on the scene already in motion, the subject working and moving continuously through its action while the camera makes a slow push-in; midway the key moment develops in closer view, and the clip ends as the action completes on a clean final frame that loops seamlessly. One continuous take, no cuts, 4K, clean frame edges for text overlay.",
-          "Vertical 9:16 stock video (8 seconds): " + t.toLowerCase() + " — opens as the subject enters the frame and begins the action; the camera tracks the movement at a natural pace with a handheld-authentic feel; through the middle seconds the action builds, and the clip ends with the subject completing the action as the motion eases out, leaving room for end-card text.",
-          "Cinematic b-roll video (10 seconds): " + t + " — opens on a moving detail of the scene, then the camera glides laterally to reveal the full setting while the subject's action unfolds; the middle of the shot follows the action at its peak, and it ends by drifting wider as the action resolves. Rich ambient motion throughout, soft highlight roll-off, 16:9 with 1:1 safe framing."
+          "6-second stock video: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + fbMove[0] + "; midway the key moment develops in closer view, and the clip ends as the action completes on a clean final frame. One continuous take, no cuts, 4K, clean frame edges for text overlay.",
+          "8-second stock video: " + t.toLowerCase() + " — opens as the subject begins the action already in frame; the camera makes a " + fbMove[1] + " that follows the action at a natural pace; through the middle seconds the action builds, and the clip ends with the subject completing the action as the motion eases out, leaving room for end-card text.",
+          "10-second cinematic b-roll video: " + t + " — opens on a moving detail of the scene, then the camera " + (fbMove[2].indexOf("locked-off") > -1 ? "holds" : "makes") + " a " + fbMove[2] + " while the subject's action unfolds; the middle of the shot follows the action at its peak, and it ends as the action resolves on a clean closing frame. Rich ambient motion throughout, soft highlight roll-off, 16:9."
         ];
         return {
           design: wrap(designProse.map(function(p, i){ return pjString("design", p, topic, opp, i + 1, null); }), "design"),
@@ -5444,6 +5611,24 @@
       renderApiBox();
 
       /* ================= LIVE RESEARCH VIA GEMINI (rotates over the saved keys) ================= */
+      /* ACCURACY & LOGIC — the strict block that travels with EVERY prompt
+         batch call, next to the Adobe rules. A prompt that contradicts
+         itself, its own fields, or its opportunity's title is a failed
+         prompt and must be rewritten before it is returned. */
+      function accuracyLines(){
+        return [
+          "ACCURACY & LOGIC (strict): every prompt must be fully accurate and internally logical. Before returning a prompt, check it against every rule below; a prompt that breaks one is a failed prompt — rewrite it, do not return it as-is.",
+          "ACCURACY — SCENE MATCH: the prompt's scene is exactly its opportunity title's scene — the same subject, the same setting and the same activity, in the title's format (Photo / Vector / Video). Import nothing from another opportunity and nothing from another topic.",
+          "ACCURACY — ALL 9 FIELDS AGREE: prompt, style, subject, composition, lighting_and_color, typography, technical and metadata all describe the SAME single scene. The color_palette hex values must be the colours actually named in the prompt text. The lighting type and direction must fit the setting and the time of day (no moonlight in a midday scene, no window light in an outdoor scene). The camera angle, framing and focal length must match the view the prose describes (an aerial scene is top-down / high angle, a macro scene is a close-up). Season, clothing, weather and props must agree with each other and with the run's topic. Any count stated anywhere — people, objects, anything counted — is the same number in the prompt text and in the subject fields.",
+          "ACCURACY — PHYSICALLY AND LOGICALLY PLAUSIBLE: the subject can actually perform the action described, objects behave physically, proportions and perspective are sane. For VIDEO, the motion must be motion that subject can really perform, technical.camera_movement is exactly the camera movement the prompt text describes, and the shot progresses coherently — how it opens, what happens in the middle, how it ends.",
+          "ACCURACY — TECHNICALS FIT THE TYPE: IMAGE / Photo prompts use photographic technicals only (real camera and lens language; no vector or illustration terms, no duration). DESIGN prompts use vector / design technicals only (no real lens, focal-length or camera claims — composition.focal_length stays 'n/a — flat design'). VIDEO technicals fit the described shot: duration_seconds and fps are sensible for the action shown.",
+          "ACCURACY — METADATA AND TEXT: metadata title, description, tags and category describe THIS prompt's scene only, and every tag is relevant to the subject actually shown. typography.has_text is true only when exact_text is present, and that text is generic, plausible inside the scene, and brand-free.",
+          "ACCURACY — SCENE LOGIC (ONE SCENE, ONE STORY): a scene is ONE coherent activity with one story. Every person and every element in it has a role connected to that same activity: when several people appear, they are participating in the same task or interacting with each other (talking, handing something over, teaching, building or deciding together) — never a group where each person does an unrelated random thing, and never two strangers pasted side by side doing separate activities. This rule applies to every prompt, in every category and on every topic.",
+          "ACCURACY — SCENE LOGIC, SPLIT VIEWS: a split-screen, diptych, before-and-after or multi-panel scene must show CONNECTED halves — one story in two parts, cause and effect or a handoff. Example, a team handoff across time zones: on one side a person finishes and SENDS the work (evening light, a clock showing their evening hour, the project visible on their screen); on the other side a teammate RECEIVES and starts that same work (morning light, a clock showing their morning hour, the SAME project or document open on their screen). The clocks, the light and the screens must agree with that story — different clock times on the two sides are logical there; different unrelated activities are not.",
+          "ACCURACY — SCENE LOGIC, PROPS AND SCREENS: props and screens support the same one story. The document, project or app visible on a screen is the same one throughout the scene, and nobody holds or uses an object that has no connection to the activity. subject.secondary_elements may list only elements that belong to the scene's own activity — if an element cannot be explained by the story, leave it out.",
+          "ACCURACY — THREE TREATMENTS, ONE CONCEPT: the 3 prompts of one type are three treatments of the SAME concept — they may vary framing, moment, composition or camera treatment, but they must never drift into a different subject, a different setting or a different activity."
+        ];
+      }
       function geminiBriefPrompt(topic, market, mix, horizon, count){
         /* Variation is mandatory on every call: a fresh random seed drives new combinations,
            and the concepts earlier runs on this same topic already used are passed along as an
@@ -5479,6 +5664,7 @@
           "Rules: exactly " + count + " opportunities sorted by score descending, scores varying realistically; respect the content mix (for example if it says Photos only, every format is Photo); titles are concrete scenes a creator can shoot or generate; demand reflects buyer search interest, competition reflects how much fresh supply already exists. Do NOT include any prompts in this answer — they are written afterwards in a separate step.",
           "ADOBE STOCK — NO IP, NO BRANDS (strict): no title or prompt may name or depict any brand, company, logo, trademark, famous product, celebrity, public figure, film / book / game title, or copyrighted character or design. Describe everything generically instead (for example 'a red sports car', never a car brand; 'a smiling woman in her thirties', never a celebrity's name; 'a generic smartphone with a blank screen', never a product name). No readable text, words, labels or logos inside any visual.",
           "ADOBE STOCK — NO SIMILAR CONTENT (strict): Adobe Stock rejects submissions that are too similar to content already on the marketplace. Every opportunity in this set must be clearly different from every other one — different concept, scene, setting, composition, camera angle, subjects, props and mood. No near-duplicates, and no same scene merely reworded. This also applies inside one opportunity: its 3 design, 3 image and 3 video prompts must each describe a distinct treatment (different framing, moment, setting detail or camera move), never the same shot paraphrased.",
+          "ACCURACY & LOGIC (strict): every opportunity title must be a real, physically plausible, shootable scene that belongs to this exact topic — the subject can actually perform the activity named, the setting fits the activity, and the format fits the scene (a Video title names an action that unfolds over time, a Photo title names a single capturable moment, a Vector title names a scene that works as flat illustration). Season, setting and activity in a title must agree with each other and with the season horizon above; the 'why' must argue from this title's own scene, never from another concept. SCENE LOGIC: each title names ONE coherent activity — if several people appear in it they share the same task or interact with each other, and any split-screen or before/after title connects its halves as one story (what is sent or finished on one side is received or continued on the other, with clocks, light and screens agreeing).",
           "FRESH AND UNIQUE EVERY RUN (strict): this topic may be researched many times, by many different users. Every run must be original — new scenes, locations, times, people, activities, compositions, camera angles and wording each time — so no prompt is ever repeated word-for-word, or even in concept, from an earlier run, and no two users receive the same prompts. If a concept feels like the obvious standard treatment of this topic, replace it with a fresher angle."
         ];
         if (priorTitles.length){
@@ -5536,6 +5722,7 @@
           "ADOBE STOCK — NO SIMILAR CONTENT (strict): Adobe Stock rejects submissions that are too similar to content already on the marketplace. Every prompt set must be clearly different from every other one — different concept, scene, setting, composition, camera angle, subjects, props and mood. No near-duplicates, and no same scene merely reworded. This also applies inside one opportunity: its 3 design, 3 image and 3 video prompts must each describe a distinct treatment (different framing, moment, setting detail or camera move), never the same shot paraphrased.",
           "FRESH AND UNIQUE EVERY RUN (strict): this topic may be researched many times, by many different users. Every run must be original — new scenes, locations, times, people, activities, compositions, camera angles and wording each time — so no prompt is ever repeated word-for-word, or even in concept, from an earlier run, and no two users receive the same prompts. If a concept feels like the obvious standard treatment of this topic, replace it with a fresher angle."
         );
+        lines = lines.concat(accuracyLines());
         if (allTitles && allTitles.length > batchOpps.length){
           var others = allTitles.filter(function(t){ return !batchOpps.some(function(o){ return o.title === t; }); });
           if (others.length) lines.push("The full run also contains these other opportunities — your treatments must stay clearly different from all of them: " + others.join(" | "));
@@ -5601,7 +5788,7 @@
              === false): they are merged in afterwards, batch by batch. */
           if (withPrompts !== false){
             var pr = o.prompts || {};
-            var d = normPrompts("design", pr.design, topic, opp), im = normPrompts("image", pr.image, topic, opp), v = normPrompts("video", pr.video, topic, opp);
+            var d = pjValidatedNorm("design", pr.design, topic, opp), im = pjValidatedNorm("image", pr.image, topic, opp), v = pjValidatedNorm("video", pr.video, topic, opp);
             if (d.length >= 3 && im.length >= 3 && v.length >= 3) opp.prompts = { design: d, image: im, video: v };
           }
           return opp;
@@ -5826,9 +6013,15 @@
             }
             if (!item) item = items[bi] || null;
             if (!item) return;
-            var d = normPrompts("design", item.design, topic, opp),
-                im = normPrompts("image", item.image, topic, opp),
-                v = normPrompts("video", item.video, topic, opp);
+            /* Accuracy gate (item level): the batch item's title must be
+               this opportunity's title copied exactly — a titled item that
+               names a different scene is rejected outright, so its prompts
+               can never be attached to the wrong opportunity; the local
+               fallback serves this opportunity instead. */
+            if (typeof item.title === "string" && item.title.trim() && item.title.trim() !== opp.title.trim()) return;
+            var d = pjValidatedNorm("design", item.design, topic, opp),
+                im = pjValidatedNorm("image", item.image, topic, opp),
+                v = pjValidatedNorm("video", item.video, topic, opp);
             if (d.length >= 3 && im.length >= 3 && v.length >= 3) opp.prompts = { design: d, image: im, video: v };
           });
         }
