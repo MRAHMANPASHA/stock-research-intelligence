@@ -1107,13 +1107,14 @@
       ];
       var PJ_FRAMING = ["wide establishing shot", "medium shot, subject filling the centre third", "close-up detail shot"];
       var PJ_ANGLE = ["eye-level camera", "slightly elevated camera, 30 degrees", "low-angle camera looking up"];
-      var PJ_DOF = ["shallow depth of field, f/2.8 background blur", "moderate depth of field, f/5.6", "deep focus, f/8, everything sharp"];
+      var PJ_DOF = ["shallow depth of field with a softly blurred background", "moderate depth of field, subject and setting both readable", "deep focus, everything sharp"];
       var PJ_FOCAL = ["35mm lens", "50mm lens", "85mm lens"];
       var PJ_COMP = ["rule of thirds, subject on the left intersection, copy space on the right", "centred symmetrical composition", "rule of thirds, subject on the right intersection, copy space on the left"];
       var PJ_LIGHT = ["soft natural window light", "warm golden-hour sunlight", "bright diffused daylight"];
       var PJ_LIGHTDIR = ["key light from the left", "key light from camera-right at 45 degrees", "gentle backlight with frontal fill"];
       var PJ_CONTRAST = ["soft, low contrast with lifted shadows", "balanced contrast, true-to-life tones", "rich contrast with deep shadows and bright highlights"];
-      var PJ_ASPECT = ["16:9", "4:5", "1:1"];
+      /* 16:9 for EVERY prompt of every type — the user's standing rule. */
+      var PJ_ASPECT = ["16:9", "16:9", "16:9"];
       var PJ_CAMMOVE = ["slow push-in toward the subject", "gentle lateral gimbal glide", "locked-off tripod shot with natural in-frame motion"];
       var PJ_PALETTE_NIGHT = ["#0B1D2E", "#1E3A52", "#7FB3D5", "#E8DCC3", "#050A12"];
       var PJ_PALETTE_SUNSET = ["#FDF0EC", "#E8A08A", "#E3B34C", "#7A2E14", "#FFF3D6"];
@@ -1230,11 +1231,11 @@
         var vLight = PJ_LIGHT[i], vLightDir = PJ_LIGHTDIR[i], vContrast = PJ_CONTRAST[i], vCamMove = PJ_CAMMOVE[i];
         if (prof.isMacro){
           vFraming = "extreme close-up macro detail shot"; vAngle = "eye-level camera at close working distance";
-          vDof = "very shallow depth of field, f/2.8, fine detail sharp"; vFocal = "100mm macro lens";
+          vDof = "very shallow depth of field, fine detail sharp"; vFocal = "100mm macro lens";
           vCamMove = "very slow push-in toward the detail";
         } else if (prof.isAerial){
           vFraming = "wide aerial establishing shot"; vAngle = "top-down high-angle aerial camera looking down";
-          vDof = "deep focus, f/8, everything sharp"; vFocal = "24mm wide lens";
+          vDof = "deep focus, everything sharp"; vFocal = "24mm wide lens";
           vCamMove = "slow forward aerial drift";
         }
         if (prof.isNight){
@@ -1254,18 +1255,18 @@
           base = {
             prompt: prose || ("Design asset brief: " + t + " — a clean commercial design composition on the theme of " + topic + ", built for headline placement and agency upload."),
             style: { medium: "vector illustration / graphic design asset", artistic_style: "flat modern illustration with subtle grain", aesthetic: "clean, minimal, print-ready", render_or_film: "layered vector shapes, scalable at any size" },
-            subject: { primary_subject: t, secondary_elements: "supporting props and details that belong to the main subject's own activity, arranged around the main subject", silhouette_and_proportions: "bold simple silhouettes; the main subject occupies about 40% of the frame" },
+            subject: { primary_subject: t, secondary_elements: "supporting props and details that belong to the main subject's own activity, arranged around the main subject", silhouette_and_proportions: "bold simple silhouettes; the main subject occupies about two-fifths of the frame" },
             composition: { framing: vFraming, camera_angle: "straight-on design view", depth_of_field: "flat design depth, all elements crisp", focal_length: "n/a — flat design", rule_of_thirds_or_symmetry: PJ_COMP[i] },
             lighting_and_color: { lighting_type: "flat even design lighting with soft shape shadows", lighting_direction: vLightDir, color_palette: pal, contrast_and_tonality: vContrast },
-            typography: { has_text: true, exact_text: "generic placeholder headline about " + topic.toLowerCase(), font_style: "clean modern sans-serif, bold display weight, generous letter spacing" },
+            typography: { has_text: false, exact_text: "", font_style: "no words are rendered in the artwork — the headline and any labels are added later in an editor; post-production type: clean modern sans-serif, bold display weight for the headline, set into the clean blank space reserved at the top of the layout" },
             negative_prompt: PJ_NEG,
-            technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras" } },
+            technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras", width: 1344, height: 768 } },
             metadata: meta
           };
         } else if (type === "video"){
           meta.category = "Video · " + topic;
           base = {
-            prompt: prose || ("Stock video clip, " + [6, 8, 10][i] + " seconds: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + vCamMove + "; midway the action develops and the framing draws closer to the key detail, and the clip ends as the action completes and the subject settles into a clean closing frame. One continuous take, no cuts, clean frame edges kept clear for overlay text."),
+            prompt: prose || ("Stock video clip, " + [6, 8, 10][i] + " seconds: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + vCamMove + "; midway the action develops and the framing draws closer to the key detail, and the clip ends as the action completes and the subject settles into a clean closing frame. One continuous take, no cuts, clean frame edges, and no text, titles or captions anywhere in the footage."),
             style: { medium: "video footage", artistic_style: "cinematic realism", aesthetic: "natural, authentic, commercial stock quality", render_or_film: "4K video, fine natural grain, soft highlight roll-off" },
             subject: { primary_subject: t, secondary_elements: "environment and props that support the action, moving naturally in frame", silhouette_and_proportions: "subject clearly readable at thumbnail size; realistic proportions throughout the move" },
             composition: { framing: vFraming, camera_angle: vAngle, depth_of_field: vDof, focal_length: vFocal, rule_of_thirds_or_symmetry: PJ_COMP[i] },
@@ -1285,7 +1286,7 @@
             lighting_and_color: lighting,
             typography: { has_text: false, exact_text: "", font_style: "" },
             negative_prompt: PJ_NEG,
-            technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw --v 6", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras" } },
+            technical: { aspect_ratio: PJ_ASPECT[i], midjourney_flags: "--ar " + PJ_ASPECT[i] + " --style raw --v 6", sdxl_flux_guidance: { cfg_scale: 7, steps: 30, sampler: "DPM++ 2M Karras", width: 1344, height: 768 } },
             metadata: meta
           };
         }
@@ -1316,10 +1317,11 @@
          palette a real hex array, the metadata describing this scene, the
          typography consistent, and — for video — real motion, a named
          camera move that the prose actually describes, a start→middle→end
-         progression and a sensible duration. A prompt that fails is not
-         shipped illogical: it is replaced by the locally built fallback
-         prompt for the same opportunity and type (pjString with no source
-         override — the same builder the local fallback path uses). */
+         progression and a sensible duration. In the LIVE flow a prompt
+         that fails is never replaced by anything written locally — its
+         batch goes back to Gemini once with the failed checks named, and
+         if it still fails the run stops honestly with nothing saved, so
+         every prompt in a live run is Gemini's own (see pjGeminiCheck). */
       var PJ_FIELDS = ["prompt", "style", "subject", "composition", "lighting_and_color", "typography", "negative_prompt", "technical", "metadata"];
       var PJ_NUMWORDS = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10 };
       function pjTitleTokens(title){
@@ -1338,6 +1340,39 @@
           if (map[noun] === undefined) map[noun] = num;
         }
         return map;
+      }
+      /* ============ PROMPT QUALITY GATE (no rendered text / specs in prose / 16:9) ============
+         The descriptive text — the prose a creator pastes into a generator —
+         is scanned as one string: prompt + subject fields + composition
+         prose. composition.focal_length is deliberately NOT scanned: it is
+         the one structured lens slot (the gate below requires it for photos
+         and forbids it for designs). Everything else must be clean:
+         (a) no ask to RENDER words — AI generators garble rendered text, so
+             headlines, labels, numbers, percentages and quoted strings are
+             forbidden in the visual; real wording lives in metadata only;
+         (b) no camera / technical values — aperture, lens mm, ISO,
+             generator flags and fps belong only in the technical field;
+         (c) technical.aspect_ratio exactly "16:9", MJ flags agreeing. */
+      var PJ_SPEC_RE = /\bf\/\d+(\.\d+)?\b|\b\d{2,3}\s?mm\b|\bISO\s?\d{2,}\b|--\s?(ar|v|style|chaos|weird|q)\b|\b\d+\s?fps\b/i;
+      var PJ_RENDER_TEXT_RE = /\b(title cards?|text overlay|overlay text|title text|chart labels?|axis labels?|data labels?|infographic text|the words|wording)\b|\b(headline|title|label|labels|caption|text)\b[^.]{0,30}\b(reading|says|saying|showing|reads)\b|\b(label|labels|labelled|labeled)\b[^.]{0,40}\b(showing|reading|with text|that read|of text)\b/i;
+      var PJ_RENDER_NUM_RE = /\d+(\.\d+)?\s?%|\b\d+\s?percent\b/i;
+      var PJ_QUOTED_RE = /["\u201C][^"\u201D]{2,}["\u201D]/;
+      function pjDescText(o){
+        var s = (o && o.subject) || {}, c = (o && o.composition) || {};
+        return [o && o.prompt, s.primary_subject, s.secondary_elements, s.silhouette_and_proportions, c.framing, c.camera_angle, c.depth_of_field, c.rule_of_thirds_or_symmetry].map(function(x){ return String(x || ""); }).join(" ");
+      }
+      function pjHasRenderedTextAsk(o){
+        /* Negated mentions ("no captions, no text overlays") are the rule
+           being obeyed, not broken — strip them before scanning. */
+        var d = pjDescText(o).replace(/\b(no|without|never|avoid|avoids|avoiding|free of)\b[^.;]{0,60}/gi, " ");
+        return PJ_RENDER_TEXT_RE.test(d) || PJ_RENDER_NUM_RE.test(d) || PJ_QUOTED_RE.test(d);
+      }
+      function pjHasSpecLeak(o){ return PJ_SPEC_RE.test(pjDescText(o)); }
+      function pjAspectBad(o){
+        var tech = (o && o.technical) || {};
+        if (String(tech.aspect_ratio || "") !== "16:9") return true;
+        var m = String(tech.midjourney_flags || "").match(/--ar\s+([0-9]+:[0-9]+)/);
+        return !!(m && m[1] !== "16:9");
       }
       function pjValidatePrompt(o, type, opp){
         if (!o || typeof o !== "object" || Array.isArray(o)) return false;
@@ -1362,10 +1397,17 @@
         if (!md.description || !String(md.description).trim()) return false;
         if (!md.category || !String(md.category).trim()) return false;
         if (!Array.isArray(md.tags) || md.tags.filter(function(x){ return String(x).trim().length > 0; }).length < 3) return false;
-        /* Typography: has_text is true only when exact_text is present. */
+        /* Typography: NO rendered text, ever — generators garble it. Real
+           wording lives only in metadata; the typography block describes
+           the text treatment to be added later in an editor. */
         var ty = o.typography || {};
-        if (ty.has_text === true && (!ty.exact_text || !String(ty.exact_text).trim())) return false;
-        if ((!ty.exact_text || !String(ty.exact_text).trim()) && ty.has_text !== false && type !== "design") return false;
+        if (ty.has_text === true) return false;
+        if (ty.exact_text && String(ty.exact_text).trim()) return false;
+        /* Prompt quality: no rendered-text ask and no camera / technical
+           values in the descriptive text; 16:9 for every type. */
+        if (pjHasRenderedTextAsk(o)) return false;
+        if (pjHasSpecLeak(o)) return false;
+        if (pjAspectBad(o)) return false;
         /* Counts agree: a counted noun is the same number in the prompt
            text and in the subject fields. */
         var cp = pjCountMap(o.prompt), cs = pjCountMap((o.subject.primary_subject || "") + " " + (o.subject.secondary_elements || ""));
@@ -1390,14 +1432,72 @@
         }
         return true;
       }
-      /* normPrompts + the accuracy gate: any prompt that fails validation
-         is swapped for the local fallback prompt for that slot. */
+      /* normPrompts + the accuracy gate, legacy single-answer path only
+         (buildLiveRun with prompts included — the split live flow below
+         never calls this; it uses pjGeminiCheck, which substitutes
+         nothing). Kept so that path's behaviour is unchanged. */
       function pjValidatedNorm(type, arr, topic, opp){
         return normPrompts(type, arr, topic, opp).map(function(s, idx){
           var ok = false;
           try { ok = pjValidatePrompt(JSON.parse(s), type, opp); } catch (e) {}
           return ok ? s : pjString(type, "", topic, opp, idx + 1, null);
         });
+      }
+      /* Plain-language names for the accuracy checks a returned prompt
+         failed — used to build the correction line when the live flow
+         re-asks Gemini for a batch (see pjGeminiCheck). */
+      function pjFailReasons(o, type, opp){
+        var out = [];
+        function push(s){ if (out.indexOf(s) === -1) out.push(s); }
+        if (!o || typeof o !== "object" || Array.isArray(o)){ push("not a complete JSON object"); return out; }
+        for (var fi = 0; fi < PJ_FIELDS.length; fi++) if (!(PJ_FIELDS[fi] in o)){ push("missing fields — every prompt needs all 9 fields"); break; }
+        if (typeof o.prompt !== "string" || o.prompt.trim().length < 30) push("prompt text missing or too short");
+        if (!o.subject || typeof o.subject.primary_subject !== "string" || !o.subject.primary_subject.trim()) push("no primary subject");
+        var toks = pjTitleTokens(opp && opp.title);
+        var hay = ((o.prompt || "") + " " + ((o.subject && o.subject.primary_subject) || "")).toLowerCase();
+        if (toks.length && !toks.some(function(tk){ return tk && hay.indexOf(tk) > -1; })) push("scene does not match its opportunity title");
+        var pal = o.lighting_and_color && o.lighting_and_color.color_palette;
+        if (!Array.isArray(pal) || pal.length < 3 || pal.some(function(c){ return !/^#[0-9a-fA-F]{6}$/.test(String(c)); })) push("colour palette is not real hex values");
+        if (!o.lighting_and_color || !o.lighting_and_color.lighting_type || !o.lighting_and_color.lighting_direction) push("lighting details missing");
+        var md = o.metadata || {};
+        if (!md.title || !String(md.title).trim() || !md.description || !String(md.description).trim() || !md.category || !String(md.category).trim() || !Array.isArray(md.tags) || md.tags.filter(function(x){ return String(x).trim().length > 0; }).length < 3) push("metadata incomplete — title, description, category and at least 3 tags required");
+        var tyF = o.typography || {};
+        if (tyF.has_text === true || (tyF.exact_text && String(tyF.exact_text).trim())) push("typography asks for words to be rendered inside the visual — has_text must be false and exact_text empty; real wording belongs in the metadata only, and the typography field describes the text treatment added later in an editor");
+        if (pjHasRenderedTextAsk(o)) push("the descriptive text asks the generator to render readable words, a headline, labels or numbers inside the visual — generators garble rendered text; describe clean blank space reserved for text added later in an editor instead, and keep charts as icons and unlabeled shapes only");
+        if (pjHasSpecLeak(o)) push("camera or technical values (aperture like f/2.8, lens length in mm, ISO, generator flags or fps) appear in the descriptive text — those values belong only in the technical field; describe focus and depth in plain words");
+        if (pjAspectBad(o)) push("aspect ratio is not 16:9 — technical.aspect_ratio must be exactly 16:9 for design, image and video alike, and the Midjourney flags must say --ar 16:9");
+        var tech = o.technical || {};
+        if (type === "video"){
+          if (typeof tech.duration_seconds !== "number" || tech.duration_seconds < 3 || tech.duration_seconds > 30) push("video duration missing or outside 3-30 seconds");
+          if (!tech.camera_movement || !String(tech.camera_movement).trim()) push("video has no named camera movement");
+          if (!tech.motion_guidance || !String(tech.motion_guidance).trim()) push("video has no motion guidance");
+          if (typeof o.prompt === "string" && (!PJ_MOTION_RE.test(o.prompt) || !PJ_PROGRESSION_RE.test(o.prompt))) push("video prompt has no real motion or start-to-end progression");
+        } else if (type === "image"){
+          if ("duration_seconds" in tech) push("a photo prompt carrying video timing");
+          var medI = String((o.style && o.style.medium) || ""), focI = String((o.composition && o.composition.focal_length) || "");
+          if (!/photo/i.test(medI) || /vector|illustration/i.test(medI) || /n\/a/i.test(focI) || !/\d+\s*mm/.test(focI)) push("photo technical details do not fit a photograph");
+        } else if (type === "design"){
+          var medD = String((o.style && o.style.medium) || ""), focD = String((o.composition && o.composition.focal_length) || "");
+          if (!/vector|illustration|design/i.test(medD) || /\d+\s*mm/.test(focD)) push("design technical details do not fit a design asset");
+        }
+        if (!out.length) push("fields that disagree with each other");
+        return out;
+      }
+      /* The LIVE flow's accuracy gate: normalise a batch answer's prompts
+         and check every one with pjValidatePrompt. Returns the normalised
+         strings only when all 3 are present and valid; otherwise the
+         plain-language reasons they failed — a failing prompt is NEVER
+         swapped for a locally built one here. */
+      function pjGeminiCheck(type, arr, topic, opp){
+        var list = normPrompts(type, arr, topic, opp);
+        if (list.length < 3) return { list: null, reasons: ["fewer than 3 " + type + " prompts returned"] };
+        var reasons = [];
+        for (var i = 0; i < list.length; i++){
+          var parsed = null, ok = false;
+          try { parsed = JSON.parse(list[i]); ok = pjValidatePrompt(parsed, type, opp); } catch (e) {}
+          if (!ok) pjFailReasons(parsed, type, opp).forEach(function(r){ if (reasons.indexOf(r) === -1) reasons.push(r); });
+        }
+        return reasons.length ? { list: null, reasons: reasons } : { list: list, reasons: [] };
       }
 
       function promptsFor(run, opp, idx){
@@ -1418,7 +1518,7 @@
         else if (prof2.isAerial) fbMove = ["slow forward aerial drift", "slow forward aerial drift", "slow forward aerial drift"];
         var designProse = [
           "Design a stock-ready composition: " + t + " — strong focal point in the left third, generous negative space reserved for a generic placeholder headline, palette matched to the scene, no logos in frame.",
-          "Create a versatile design asset based on \"" + t + "\": layered depth (foreground prop, mid subject, soft background), balanced symmetry, export-friendly margins on all sides.",
+          "Create a versatile design asset based on " + t + ": layered depth (foreground prop, mid subject, soft background), balanced symmetry, export-friendly margins on all sides.",
           "Design brief for " + topic + ": hero visual of " + t.toLowerCase() + ", premium editorial style, consistent lighting direction, space at top for title placement, high commercial appeal."
         ];
         var imageProse = [
@@ -1431,8 +1531,8 @@
            the camera move, how the shot opens, what happens in the middle,
            how it ends, and its duration. */
         var videoProse = [
-          "6-second stock video: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + fbMove[0] + "; midway the key moment develops in closer view, and the clip ends as the action completes on a clean final frame. One continuous take, no cuts, 4K, clean frame edges for text overlay.",
-          "8-second stock video: " + t.toLowerCase() + " — opens as the subject begins the action already in frame; the camera makes a " + fbMove[1] + " that follows the action at a natural pace; through the middle seconds the action builds, and the clip ends with the subject completing the action as the motion eases out, leaving room for end-card text.",
+          "6-second stock video: " + t + " — the shot opens on the scene already in motion, the subject performing its defining action continuously while the camera makes a " + fbMove[0] + "; midway the key moment develops in closer view, and the clip ends as the action completes on a clean final frame. One continuous take, no cuts, 4K, clean frame edges, no text anywhere in the footage.",
+          "8-second stock video: " + t.toLowerCase() + " — opens as the subject begins the action already in frame; the camera makes a " + fbMove[1] + " that follows the action at a natural pace; through the middle seconds the action builds, and the clip ends with the subject completing the action as the motion eases out on a clean closing frame, no text anywhere in the footage.",
           "10-second cinematic b-roll video: " + t + " — opens on a moving detail of the scene, then the camera " + (fbMove[2].indexOf("locked-off") > -1 ? "holds" : "makes") + " a " + fbMove[2] + " while the subject's action unfolds; the middle of the shot follows the action at its peak, and it ends as the action resolves on a clean closing frame. Rich ambient motion throughout, soft highlight roll-off, 16:9."
         ];
         return {
@@ -3713,12 +3813,12 @@
         { f: "assets/ev/bbq2-01.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-01.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/eggs2-01.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
-        { f: "assets/ev/steak2-01.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
-        { f: "assets/ev/steak2-02.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-04.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-05.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/bread2-02.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/bbq2-02.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/cheesecake2-01.jpg", t: "cheesecake cafe", c: "Food & Drink" },
-        { f: "assets/ev/steak2-03.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-06.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/eggs2-02.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
         { f: "assets/ev/bbq2-03.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-03.jpg", t: "artisan bread bakery", c: "Food & Drink" },
@@ -5465,13 +5565,34 @@
          These current models are tried in order — any error moves to the next model,
          and only when all of them fail does the next saved key take over. */
       var GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
-      /* Hard cap on a single model attempt: if Gemini has not answered within
-         this time, the attempt is aborted and the chain moves to the next model,
-         so one silent connection can never park a run on a waiting step. */
-      var GEMINI_TIMEOUT_MS = 120000;
-      /* Prompt batches are small answers (3 opportunities at a time), so their
-         per-attempt cap is tighter than the brief call's. */
-      var GEMINI_BATCH_TIMEOUT_MS = 90000;
+      /* HARD CLOCK FOR A WHOLE RUN: generation — the brief call plus every
+         prompt batch — may never run past 240 seconds from the moment the
+         brief call starts. The target is a 2-4 minute run, never more:
+         every budget below lives inside this clock, each batch's budget is
+         capped at whatever clock time remains, and when the clock expires
+         with batches still unwritten the run FAILS honestly — every prompt
+         must come from Gemini, so nothing is ever filled in locally and
+         nothing is saved — and no Gemini call is ever started after it. */
+      var GEMINI_RUN_BUDGET_MS = 240000;
+      /* Per-attempt cap for the brief call: if Gemini has not answered
+         within this time, the attempt is aborted and the chain moves to
+         the next model, so one silent connection can never park a run. */
+      var GEMINI_TIMEOUT_MS = 45000;
+      /* Total budget for the brief call across all of its attempts and
+         passes. The brief is essential, but if it cannot be obtained
+         inside 75s the run fails fast with the real reason — brief
+         retries never get to eat the whole 240s clock. */
+      var GEMINI_BRIEF_BUDGET_MS = 75000;
+      /* Prompt batches are written CONCURRENTLY — a pool of 3 workers,
+         each writing one batch of 3 opportunities — so their per-attempt
+         cap is tighter still: a batch that cannot answer within 40s is
+         output-bound and rarely saves itself by waiting longer. */
+      var GEMINI_BATCH_TIMEOUT_MS = 40000;
+      /* Hard wall-clock budget for ONE prompt batch, across every key,
+         model and retry pass it tries (and never past the run's clock).
+         When it runs out, the batch — and with it the whole run — fails
+         honestly: no prompt is ever written locally. */
+      var GEMINI_BATCH_BUDGET_MS = 100000;
       var LS_KEYS = "sri_gemini_keys";
       function getKeys(){
         try {
@@ -5621,8 +5742,12 @@
           "ACCURACY — SCENE MATCH: the prompt's scene is exactly its opportunity title's scene — the same subject, the same setting and the same activity, in the title's format (Photo / Vector / Video). Import nothing from another opportunity and nothing from another topic.",
           "ACCURACY — ALL 9 FIELDS AGREE: prompt, style, subject, composition, lighting_and_color, typography, technical and metadata all describe the SAME single scene. The color_palette hex values must be the colours actually named in the prompt text. The lighting type and direction must fit the setting and the time of day (no moonlight in a midday scene, no window light in an outdoor scene). The camera angle, framing and focal length must match the view the prose describes (an aerial scene is top-down / high angle, a macro scene is a close-up). Season, clothing, weather and props must agree with each other and with the run's topic. Any count stated anywhere — people, objects, anything counted — is the same number in the prompt text and in the subject fields.",
           "ACCURACY — PHYSICALLY AND LOGICALLY PLAUSIBLE: the subject can actually perform the action described, objects behave physically, proportions and perspective are sane. For VIDEO, the motion must be motion that subject can really perform, technical.camera_movement is exactly the camera movement the prompt text describes, and the shot progresses coherently — how it opens, what happens in the middle, how it ends.",
-          "ACCURACY — TECHNICALS FIT THE TYPE: IMAGE / Photo prompts use photographic technicals only (real camera and lens language; no vector or illustration terms, no duration). DESIGN prompts use vector / design technicals only (no real lens, focal-length or camera claims — composition.focal_length stays 'n/a — flat design'). VIDEO technicals fit the described shot: duration_seconds and fps are sensible for the action shown.",
-          "ACCURACY — METADATA AND TEXT: metadata title, description, tags and category describe THIS prompt's scene only, and every tag is relevant to the subject actually shown. typography.has_text is true only when exact_text is present, and that text is generic, plausible inside the scene, and brand-free.",
+          "ACCURACY — TECHNICALS FIT THE TYPE: IMAGE / Photo prompts use photographic technicals only (photographic medium and rendering language; no vector or illustration terms, no duration). DESIGN prompts use vector / design technicals only (no real lens, focal-length or camera claims — composition.focal_length stays 'n/a — flat design'). VIDEO technicals fit the described shot: duration_seconds and fps are sensible for the action shown.",
+          "ACCURACY — METADATA: metadata title, description, tags and category describe THIS prompt's scene only, and every tag is relevant to the subject actually shown.",
+          "ACCURACY — NO RENDERED TEXT IN THE VISUAL (strict): the descriptive text (prompt, subject, composition) must never ask the generator to render words, a headline, labels, numbers, percentages or quoted text inside the visual — AI image and video generators garble rendered text, so every rendered word comes out broken and misspelled. Where a design would carry words, describe a clean blank placeholder area / negative space reserved for text the buyer adds later in an editor. Infographic charts are icons plus unlabeled bar and pie SHAPES only — no values, no axis labels, no data labels. Videos carry no title cards, captions or text overlays in the footage. Real wording lives ONLY in metadata (title, description, tags), which is never rendered. typography.has_text is always false and typography.exact_text is always empty; the typography block only describes the text treatment to be added in post — its style, placement and hierarchy — or states that text is added in post.",
+          "ACCURACY — TECHNICAL VALUES STAY OUT OF THE PROSE (strict): aperture, lens and ISO values (f/2.8, 85mm, ISO 400), Midjourney flags (--ar, --v, --style) and fps appear ONLY inside the technical object — never in the prompt prose, the subject fields or the composition text. In prose, describe focus and depth in plain words instead ('shallow depth of field with a softly blurred background', 'deep focus, everything sharp'). The single exception is composition.focal_length for photo and video prompts, which names the lens there and nowhere else.",
+          "ACCURACY — 16:9 EVERYWHERE (strict): technical.aspect_ratio is exactly \"16:9\" for every prompt of every type — design, image and video, no exceptions and no other ratio anywhere. Midjourney flags must agree (--ar 16:9), SDXL / Flux guidance targets 16:9 dimensions (width 1344, height 768), and every scene is composed for a wide 16:9 frame.",
+          "ACCURACY — PREMIUM, READY-TO-PASTE DETAIL (strict): every prompt paragraph is rich, concrete and directly usable — the exact subject and its action, the setting, the composition, the lighting, the palette colours and the mood, written so it can be pasted into a generator as-is. Thin, generic or filler prose is a failed prompt: rewrite it with specific, vivid detail before returning it.",
           "ACCURACY — SCENE LOGIC (ONE SCENE, ONE STORY): a scene is ONE coherent activity with one story. Every person and every element in it has a role connected to that same activity: when several people appear, they are participating in the same task or interacting with each other (talking, handing something over, teaching, building or deciding together) — never a group where each person does an unrelated random thing, and never two strangers pasted side by side doing separate activities. This rule applies to every prompt, in every category and on every topic.",
           "ACCURACY — SCENE LOGIC, SPLIT VIEWS: a split-screen, diptych, before-and-after or multi-panel scene must show CONNECTED halves — one story in two parts, cause and effect or a handoff. Example, a team handoff across time zones: on one side a person finishes and SENDS the work (evening light, a clock showing their evening hour, the project visible on their screen); on the other side a teammate RECEIVES and starts that same work (morning light, a clock showing their morning hour, the SAME project or document open on their screen). The clocks, the light and the screens must agree with that story — different clock times on the two sides are logical there; different unrelated activities are not.",
           "ACCURACY — SCENE LOGIC, PROPS AND SCREENS: props and screens support the same one story. The document, project or app visible on a screen is the same one throughout the scene, and nobody holds or uses an object that has no connection to the activity. subject.secondary_elements may list only elements that belong to the scene's own activity — if an element cannot be explained by the story, leave it out.",
@@ -5682,11 +5807,11 @@
           '      "subject": { "primary_subject": "...", "secondary_elements": "...", "silhouette_and_proportions": "..." },',
           '      "composition": { "framing": "...", "camera_angle": "...", "depth_of_field": "...", "focal_length": "...", "rule_of_thirds_or_symmetry": "..." },',
           '      "lighting_and_color": { "lighting_type": "...", "lighting_direction": "...", "color_palette": ["#RRGGBB", "#RRGGBB", "#RRGGBB", "#RRGGBB"], "contrast_and_tonality": "..." },',
-          '      "typography": { "has_text": false, "exact_text": "", "font_style": "" },',
+          '      "typography": { "has_text": false, "exact_text": "", "font_style": "text treatment to be added in post only — style, placement, hierarchy; never words rendered in the visual" },',
           '      "negative_prompt": "comma-separated list of things to exclude, always including brand logos, trademarks, watermarks and copyrighted characters",',
-          '      "technical": { "aspect_ratio": "16:9", "midjourney_flags": "--ar 16:9 --style raw --v 6", "sdxl_flux_guidance": { "cfg_scale": 7, "steps": 30, "sampler": "DPM++ 2M Karras" } },',
+          '      "technical": { "aspect_ratio": "16:9", "midjourney_flags": "--ar 16:9 --style raw --v 6", "sdxl_flux_guidance": { "cfg_scale": 7, "steps": 30, "sampler": "DPM++ 2M Karras", "width": 1344, "height": 768 } },',
           '      "metadata": { "title": "short asset title", "description": "1-2 sentences", "tags": ["8-12 search tags"], "category": "..." } }',
-          '    Adapt the skeleton per type: DESIGN prompts use illustration / vector / graphic-design mediums and their typography block is a working design element (generic placeholder headline text only — never a brand name). IMAGE prompts are photographic (medium: digital photograph, real camera and lens language) and each describes ONE single frozen instant — a still frame, no movement, no camera travel, no time passing. VIDEO prompts are MOTION scripts, the opposite of a still: the prose opens with the action already moving, states exactly how the SUBJECT moves, exactly how the CAMERA moves, walks the shot through time (how it opens, what happens in the middle, how it ends) and sets the duration; the composition block describes the moving shot (subject movement and camera movement), and the technical block is { "aspect_ratio": "16:9", "duration_seconds": 8, "fps": 24, "camera_movement": "...", "motion_guidance": "..." } instead of the still-image guidance. Still-photo language (a frozen moment, a posed subject, a single captured instant) is FORBIDDEN in a video prompt. Each of the 3 prompts of a type is a different treatment of the concept.'
+          '    Adapt the skeleton per type: DESIGN prompts use illustration / vector / graphic-design mediums; the artwork itself renders NO words — the layout reserves clean blank space where text will go, and the typography block describes only the text treatment the buyer adds later in an editor (style, placement, hierarchy). Every prompt of every type is composed for a wide 16:9 frame and technical.aspect_ratio is always exactly "16:9". IMAGE prompts are photographic (medium: digital photograph, real photographic language — but aperture, lens and ISO values appear only in composition.focal_length and the technical block, never in the prose) and each describes ONE single frozen instant — a still frame, no movement, no camera travel, no time passing. VIDEO prompts are MOTION scripts, the opposite of a still: the prose opens with the action already moving, states exactly how the SUBJECT moves, exactly how the CAMERA moves, walks the shot through time (how it opens, what happens in the middle, how it ends) and sets the duration; the composition block describes the moving shot (subject movement and camera movement), and the technical block is { "aspect_ratio": "16:9", "duration_seconds": 8, "fps": 24, "camera_movement": "...", "motion_guidance": "..." } instead of the still-image guidance. Still-photo language (a frozen moment, a posed subject, a single captured instant) is FORBIDDEN in a video prompt. Each of the 3 prompts of a type is a different treatment of the concept.'
         ];
       }
       /* Prompts are written in small batches — one call per few opportunities — so
@@ -5814,6 +5939,8 @@
         return run;
       }
       function friendlyGeminiError(err){
+        if (err && err.promptsFailed) return "Google could not finish the prompts in time — no backup or template prompts are used, so nothing was saved. Please try again in a little while.";
+        if (err && err.budgetExhausted) return "Gemini is answering very slowly right now — the brief call used up its 75-second time budget without an answer from any model, so the run was stopped fast instead of hanging. Nothing is wrong with your key; please run the research again in a little while.";
         if (err && err.timedOut) return "Gemini took too long to answer — every model we tried went past the time limit. Nothing is wrong with your key; please run the research again.";
         if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in Settings and it will be used automatically.";
         if (err && /location is not supported|not supported in your|user location/i.test(err.gmsg || "")) return "Google says the Gemini API is not available from your current location, so the key could not run. The exact reply from Google is in the run log above.";
@@ -5864,7 +5991,11 @@
            that step can no longer sit at "waiting" while the model is still
            writing, and the elapsed clock shows the wait is the model's, not a hang. */
         var PARK_AT = LIVE_STEPS.length - 3;
-        var batchCur = 0, batchTotal = 0;
+        /* Prompts progress for the parked step row: how many of the run's
+           opportunities already have their prompts (every one of them
+           written by Gemini) out of the total, updated as each parallel
+           batch lands. Zero until the brief is back. */
+        var promptsDone = 0, promptsTotal = 0;
         /* Seconds left in a "Google busy" pause between chain passes (set by
            runChain's auto-retry below). While it is above zero the parked step
            row shows the retry countdown instead of the batch/elapsed text, so
@@ -5873,18 +6004,18 @@
         function startWaitClock(){
           var parked = stepEls[PARK_AT];
           parked.querySelector(".st").textContent = "waiting";
-          logLine("writing prompts in batches — the brief comes first, then the prompts a few opportunities at a time, so no single answer can run into the time limit");
+          logLine("the brief comes first, then the prompts are written in parallel batches — the whole run is capped at 4 minutes, and every prompt must come from Gemini: if Google cannot finish in time the run stops and nothing is saved (no backup prompts are ever used)");
           waitTimer = setInterval(function(){
             waitSecs += 1;
             var stEl = parked.querySelector(".st");
             if (retryEta > 0){
               stEl.textContent = "Google busy — retry in " + retryEta + "s";
             } else if (parked.classList.contains("run")){
-              stEl.textContent = batchTotal ? ("batch " + Math.max(1, batchCur) + " of " + batchTotal + " · " + waitSecs + "s") : ("waiting · " + waitSecs + "s");
+              stEl.textContent = promptsTotal ? (promptsDone + " of " + promptsTotal + " ready · " + waitSecs + "s") : ("waiting · " + waitSecs + "s");
             }
             if (waitSecs % 15 === 0){
               if (retryEta > 0) logLine("Google is still busy — next attempt in " + retryEta + "s");
-              else if (batchTotal) logLine("still writing — batch " + Math.max(1, batchCur) + " of " + batchTotal + " · " + waitSecs + "s elapsed");
+              else if (promptsTotal) logLine("writing prompts — " + promptsDone + " of " + promptsTotal + " ready · " + waitSecs + "s elapsed");
               else logLine("still working — waiting for Gemini's answer · " + waitSecs + "s elapsed");
             }
           }, 1000);
@@ -5927,6 +6058,7 @@
         var lastErr = null;
         function errDetail(err){
           if (!err) return "";
+          if (err.budgetExhausted) return "this step used up its whole time budget — every attempt together took too long";
           if (err.timedOut) return "no answer within " + Math.round((err.timeoutMs || GEMINI_TIMEOUT_MS) / 1000) + "s — attempt timed out";
           var d = err.status ? "HTTP " + err.status : "";
           if (err.gmsg) d += (d ? " — " : "") + err.gmsg;
@@ -5940,6 +6072,46 @@
            the chain moving (a malformed answer retries like any other failure). Every
            successful call credits its tokens to the key that answered; the brief call
            (creditRun) also counts as the run in the usage tally. */
+        /* FASTEST-FIRST + KEY SPREAD: the chain does not have to start at
+           Key 1 / the first model. chainPairs rotates the full key x model
+           order so each call opens on its given start pair, with the rest
+           of the chain following in its normal order. The brief opens at
+           Key 1 / the first model. Every prompt batch opens on its
+           round-robin key — batch 1 on Key 1, batch 2 on Key 2, batch 3 on
+           Key 3, then rotating — paired with the model that won most
+           recently, so the 3 concurrent workers never queue on a single
+           key's quota (each saved key usually belongs to a separate Google
+           account with its own free limit, and the spread lets them work
+           in parallel), and on a slow-Google day batches no longer re-burn
+           timeouts on dead models before reaching the one that answers.
+           Each call still walks the whole chain from its start pair,
+           falling over to the next model and then the next key on failure;
+           with a single saved key every call simply starts on that key. */
+        function chainPairs(startPair){
+          var all = [];
+          for (var ki = 0; ki < keys.length; ki++)
+            for (var mi = 0; mi < GEMINI_MODELS.length; mi++) all.push([ki, mi]);
+          if (startPair && all.length > 1){
+            var sk = Math.max(0, Math.min(startPair.ki || 0, keys.length - 1));
+            var sm = Math.max(0, Math.min(startPair.mi || 0, GEMINI_MODELS.length - 1));
+            var at = -1;
+            for (var i = 0; i < all.length; i++){ if (all[i][0] === sk && all[i][1] === sm){ at = i; break; } }
+            if (at > 0) all = all.slice(at).concat(all.slice(0, at));
+          }
+          return all;
+        }
+        /* HARD TIME BUDGET: every call also carries a total wall-clock
+           budget (opts.budgetMs) shared by all of its attempts and retry
+           passes. Each attempt is capped at whatever budget remains, and
+           the moment the budget is exhausted the call rejects with a
+           budgetExhausted error — the caller decides what that means (the
+           brief call ends the run with the real reason; a prompt batch
+           ends the whole run honestly — no prompt is ever written
+           locally). No call can ever wait longer than its budget, however
+           the chain multiplies out underneath it. A caller may also pass
+           opts.shouldStop: once it reports true, no further attempt (and
+           no retry pass) is started — how a failed prompt batch halts the
+           other workers' chains without waiting for their timeouts. */
         /* Auto-retry passes: Google sometimes answers 503 "high demand" (or 429)
            on EVERY model at the same moment — a demand spike that usually
            clears within seconds, but one pass over the chain used to end the
@@ -5947,11 +6119,13 @@
            failures; when a whole pass over all keys x models fails with
            nothing else, the chain waits about 15 seconds — the parked step
            row counts the pause down via retryEta and the log says why — then
-           runs the pass again, up to 3 passes in total. A pass hit by any
-           non-transient error (bad key, unreadable answer, timeout) is NOT
-           retried: the call ends at once with the real error. Success on any
-           pass continues the run exactly as before. This wraps every call —
-           the brief call and each prompt-batch call alike. */
+           runs the pass again, up to opts.maxPasses passes in total (the
+           brief gets 3, a prompt batch gets 2 — one extra pass, and only
+           inside its budget). A pass hit by any non-transient error (bad
+           key, unreadable answer, timeout) is NOT retried: the call ends at
+           once with the real error. Success on any pass continues the run
+           exactly as before. This wraps every call — the brief call and
+           each prompt-batch call alike. */
         function isTransientErr(err){
           if (!err) return false;
           if (err.status === 503 || err.status === 429) return true;
@@ -5966,64 +6140,101 @@
             }, 1000);
           });
         }
-        function runChain(promptText, timeoutMs, creditRun, onOk){
-          var MAX_PASSES = 3, RETRY_WAIT_S = 15;
+        function runChain(promptText, opts, onOk){
+          var RETRY_WAIT_S = 15;
+          var attemptCap = opts.attemptTimeoutMs;
+          var deadline = Date.now() + opts.budgetMs;
+          var maxPasses = opts.maxPasses || 1;
+          var pairs = chainPairs(opts.startPair);
           var pass = 0;
+          function budgetErr(){ var e = new Error("gemini-budget"); e.budgetExhausted = true; return e; }
           function onePass(){
             pass += 1;
             lastErr = null;
             var passTransientOnly = true;
-            function tryCombo(ki, mi){
-              if (ki >= keys.length) return Promise.reject(lastErr || new Error("gemini-empty"));
-              if (mi >= GEMINI_MODELS.length) return tryCombo(ki + 1, 0);
-              return callGemini(keys[ki], GEMINI_MODELS[mi], promptText, timeoutMs).then(function(res){
+            function tryPair(pi){
+              if (opts.shouldStop && opts.shouldStop()){ var se = new Error("gemini-stopped"); se.stopped = true; return Promise.reject(se); }
+              if (pi >= pairs.length) return Promise.reject(lastErr || new Error("gemini-empty"));
+              var remaining = deadline - Date.now();
+              if (remaining <= 0) return Promise.reject(budgetErr());
+              var ki = pairs[pi][0], mi = pairs[pi][1];
+              return callGemini(keys[ki], GEMINI_MODELS[mi], promptText, Math.min(attemptCap, remaining)).then(function(res){
                 var value = onOk(res.json);
-                if (creditRun) recordKeyUsage(keys[ki], res.tokens); else recordKeyTokens(keys[ki], res.tokens);
-                return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[mi] };
+                if (opts.creditRun) recordKeyUsage(keys[ki], res.tokens); else recordKeyTokens(keys[ki], res.tokens);
+                return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[mi], ki: ki, mi: mi };
               }).catch(function(err){
+                if (err && err.budgetExhausted) throw err;
                 lastErr = err;
                 if (!isTransientErr(err)) passTransientOnly = false;
                 if (err && err.status === 429) markKeyQuota(keys[ki]);
                 var det = errDetail(err);
-                if (mi + 1 < GEMINI_MODELS.length)
-                  logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " could not answer" + (det ? " (" + det + ")" : "") + " — switching to " + GEMINI_MODELS[mi + 1], "warn");
-                else if (ki + 1 < keys.length)
-                  logLine("Key " + (ki + 1) + " did not answer on any model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (ki + 2) + " automatically", "warn");
-                return tryCombo(ki, mi + 1);
+                var nx = pairs[pi + 1];
+                if (nx){
+                  if (nx[0] === ki)
+                    logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " could not answer" + (det ? " (" + det + ")" : "") + " — switching to " + GEMINI_MODELS[nx[1]], "warn");
+                  else
+                    logLine("Key " + (ki + 1) + " did not answer on any model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (nx[0] + 1) + " automatically", "warn");
+                }
+                return tryPair(pi + 1);
               });
             }
-            return tryCombo(0, 0).catch(function(err){
-              if (pass < MAX_PASSES && passTransientOnly){
-                logLine("Google is busy — every model is temporarily overloaded (503/429). Waiting " + RETRY_WAIT_S + "s, then trying again — attempt " + (pass + 1) + " of " + MAX_PASSES, "warn");
-                return chainWait(RETRY_WAIT_S).then(onePass);
+            return tryPair(0).catch(function(err){
+              if (err && err.budgetExhausted) throw err;
+              if (err && err.stopped) throw err;
+              if (pass < maxPasses && passTransientOnly){
+                var remainS = Math.floor((deadline - Date.now()) / 1000);
+                if (remainS < 2) throw budgetErr();
+                var waitS = Math.min(RETRY_WAIT_S, remainS);
+                logLine("Google is busy — every model is temporarily overloaded (503/429). Waiting " + waitS + "s, then trying again — attempt " + (pass + 1) + " of " + maxPasses, "warn");
+                return chainWait(waitS).then(onePass);
               }
               throw err;
             });
           }
           return onePass();
         }
-        /* Merge one batch answer into its opportunities: items are matched by exact
-           title first, then by position, and normalised into skeleton-complete JSON. */
-        function applyBatch(batchOpps, data){
+        /* Check one batch answer against its opportunities WITHOUT writing
+           anything into them yet: items are matched by exact title first,
+           then by position, normalised into skeleton-complete JSON and put
+           through the accuracy gate (pjGeminiCheck). Only when EVERY
+           opportunity in the batch has 3 valid Gemini prompts of each type
+           are they merged in; otherwise the caller re-asks Gemini once
+           with the failed checks named — and failing that, the run stops.
+           A live run never contains a locally written prompt. */
+        function applyBatchChecked(batchOpps, data){
           var items = (data && Array.isArray(data.prompts)) ? data.prompts : [];
+          var fails = [], staged = [];
           batchOpps.forEach(function(opp, bi){
             var item = null;
             for (var j = 0; j < items.length; j++){
               if (items[j] && typeof items[j].title === "string" && items[j].title.trim().toLowerCase() === opp.title.trim().toLowerCase()){ item = items[j]; break; }
             }
             if (!item) item = items[bi] || null;
-            if (!item) return;
+            if (!item){ fails.push("no prompts at all for \"" + opp.title + "\""); staged.push(null); return; }
             /* Accuracy gate (item level): the batch item's title must be
                this opportunity's title copied exactly — a titled item that
                names a different scene is rejected outright, so its prompts
-               can never be attached to the wrong opportunity; the local
-               fallback serves this opportunity instead. */
-            if (typeof item.title === "string" && item.title.trim() && item.title.trim() !== opp.title.trim()) return;
-            var d = pjValidatedNorm("design", item.design, topic, opp),
-                im = pjValidatedNorm("image", item.image, topic, opp),
-                v = pjValidatedNorm("video", item.video, topic, opp);
-            if (d.length >= 3 && im.length >= 3 && v.length >= 3) opp.prompts = { design: d, image: im, video: v };
+               can never be attached to the wrong opportunity. */
+            if (typeof item.title === "string" && item.title.trim() && item.title.trim() !== opp.title.trim()){
+              fails.push("prompts labelled \"" + item.title.trim() + "\" do not belong to \"" + opp.title + "\"");
+              staged.push(null); return;
+            }
+            var d = pjGeminiCheck("design", item.design, topic, opp),
+                im = pjGeminiCheck("image", item.image, topic, opp),
+                v = pjGeminiCheck("video", item.video, topic, opp);
+            if (!d.list || !im.list || !v.list){
+              var rs = [];
+              [["design", d], ["image", im], ["video", v]].forEach(function(pair){
+                if (!pair[1].list) pair[1].reasons.forEach(function(r){ var s = pair[0] + " prompt: " + r; if (rs.indexOf(s) === -1) rs.push(s); });
+              });
+              fails.push("\"" + opp.title + "\" — " + rs.join("; "));
+              staged.push(null); return;
+            }
+            staged.push({ design: d.list, image: im.list, video: v.list });
           });
+          if (fails.length) return { ok: false, fails: fails };
+          batchOpps.forEach(function(opp, bi){ opp.prompts = staged[bi]; });
+          return { ok: true, fails: [] };
         }
         /* Short "already used" digest of one opportunity's finished prompts, fed to
            later batches so their scenes and treatments cannot repeat these. */
@@ -6035,41 +6246,138 @@
             return opp.title + " — " + String(s).slice(0, 140);
           } catch (e) { return opp.title; }
         }
-        /* Split generation: ONE light call for the brief + opportunities (no prompts
-           — the part that used to time out at 120s), then the prompts in batches of
-           3 opportunities, each batch on the same key x model chain with a 90s cap.
-           A batch that fails on every key and model is retried through the chain on
-           its own; if it still cannot be written, only that batch's opportunities
-           fall back to locally built prompts — the run itself fails only when the
-           brief call fails. */
-        var BATCH_SIZE = 3;
-        var runPromise = runChain(geminiBriefPrompt(topic, market, mix, horizon, want), GEMINI_TIMEOUT_MS, true, function(json){
+        /* Split generation under the run's hard clock: ONE light call for the
+           brief + opportunities (no prompts), then the prompts in batches of
+           3 opportunities written CONCURRENTLY by a pool of 3 workers, every
+           call on the key x model chain under its own budget (see runChain)
+           and never past the 240s run clock (GEMINI_RUN_BUDGET_MS, started
+           the moment the brief call starts). Each batch opens on its
+           round-robin key (batch 1 → Key 1, batch 2 → Key 2, batch 3 → Key 3,
+           then rotating) paired with the most recent winning model, so the
+           workers spread across the saved keys' separate quotas instead of
+           queueing on one. GEMINI-ONLY: every prompt in the run must be
+           written by Gemini — no batch is ever completed locally, because
+           locally templated prompts could hand two users near-identical
+           results for the same research. A batch whose answer fails the
+           accuracy gate is re-asked ONCE with the failed checks named; a
+           batch that fails on every key and model, whose budget runs out,
+           whose re-ask still fails validation, or that is still unwritten
+           when the clock expires FAILS THE WHOLE RUN inside the clock:
+           remaining Gemini calls stop, the Writing prompts step is marked
+           failed, and nothing is saved. The do-not-repeat
+           list each batch is built with is the brief's full opportunity set
+           (already inside the batch prompt) plus the digests of the batches
+           COMPLETED by call time, so parallel batches cannot repeat a
+           finished batch's scenes, and later batches inherit the digests of
+           everything that landed before them. */
+        var BATCH_SIZE = 3, POOL_SIZE = 3;
+        var lastWin = { ki: 0, mi: 0 };
+        var runDeadline = Date.now() + GEMINI_RUN_BUDGET_MS;
+        /* Set the moment any prompt batch fails for good: workers stop
+           pulling new batches and in-flight chains stop starting new
+           attempts (runChain's shouldStop), so a failed run makes no
+           further Gemini calls. */
+        var promptsFailed = false, failLineLogged = false;
+        /* The one honest failure of the prompts phase: carries the last
+           real Google error (status/message) when there is one, so the run
+           log can show exactly what Google said. */
+        function promptsFailError(cause){
+          var e = new Error("gemini-prompts-failed");
+          e.promptsFailed = true;
+          if (cause){
+            if (cause.status) e.status = cause.status;
+            if (cause.gmsg) e.gmsg = cause.gmsg;
+          }
+          return e;
+        }
+        var runPromise = runChain(geminiBriefPrompt(topic, market, mix, horizon, want), { attemptTimeoutMs: GEMINI_TIMEOUT_MS, budgetMs: GEMINI_BRIEF_BUDGET_MS, maxPasses: 3, creditRun: true, startPair: { ki: 0, mi: 0 } }, function(json){
           return buildLiveRun(json, topic, market, want, false);
         }).then(function(briefRes){
           var run = briefRes.value;
-          logLine("brief & " + run.opportunities.length + " opportunities received via Key " + briefRes.keyNo + (briefRes.model !== GEMINI_MODELS[0] ? " (" + briefRes.model + ")" : "") + " — now writing the prompts in batches", "ok");
-          var batches = [];
-          for (var bi = 0; bi < run.opportunities.length; bi += BATCH_SIZE) batches.push(run.opportunities.slice(bi, bi + BATCH_SIZE));
-          batchTotal = batches.length;
+          lastWin = { ki: briefRes.ki, mi: briefRes.mi };
+          logLine("brief & " + run.opportunities.length + " opportunities received via Key " + briefRes.keyNo + (briefRes.model !== GEMINI_MODELS[0] ? " (" + briefRes.model + ")" : "") + " — now writing the prompts in parallel batches", "ok");
+          var queue = [];
+          for (var bi = 0; bi < run.opportunities.length; bi += BATCH_SIZE)
+            queue.push(run.opportunities.slice(bi, bi + BATCH_SIZE));
+          promptsTotal = run.opportunities.length;
           var allTitles = run.opportunities.map(function(o){ return o.title; });
           var avoid = [];
-          var seq = Promise.resolve();
-          batches.forEach(function(batchOpps, idx){
-            seq = seq.then(function(){
-              batchCur = idx + 1;
-              logLine("writing prompts — batch " + (idx + 1) + " of " + batches.length + " (" + batchOpps.map(function(o){ return o.title; }).join("; ") + ")");
-              return runChain(geminiBatchPrompt(topic, market, mix, horizon, batchOpps, avoid, allTitles), GEMINI_BATCH_TIMEOUT_MS, false, function(json){
-                applyBatch(batchOpps, json);
-                if (!batchOpps.every(function(o){ return !!o.prompts; })) throw new Error("gemini-batch-short");
+          var nextIdx = 0;
+          function runBatch(batchOpps, bIdx){
+            logLine("writing prompts — batch " + (bIdx + 1) + " of " + queue.length + " (" + batchOpps.map(function(o){ return o.title; }).join("; ") + ")");
+            var basePrompt = geminiBatchPrompt(topic, market, mix, horizon, batchOpps, avoid.slice(), allTitles);
+            var batchStart = Date.now();
+            /* What is left of this batch's own budget AND of the run's
+               240s clock — the corrected re-ask below lives inside both. */
+            function budgetLeft(){
+              return Math.min(GEMINI_BATCH_BUDGET_MS - (Date.now() - batchStart), runDeadline - Date.now());
+            }
+            /* One trip through the key x model chain for this batch. The
+               answer is captured, not merged: applyBatchChecked commits it
+               only if every prompt passes the accuracy gate as Gemini's
+               own work; otherwise this attempt fails as "invalid". */
+            function attempt(promptText){
+              var left = budgetLeft();
+              if (left <= 0){ var be = new Error("gemini-budget"); be.budgetExhausted = true; return Promise.reject(be); }
+              var got = null;
+              return runChain(promptText, { attemptTimeoutMs: GEMINI_BATCH_TIMEOUT_MS, budgetMs: left, maxPasses: 2, creditRun: false, startPair: { ki: bIdx % keys.length, mi: lastWin.mi }, shouldStop: function(){ return promptsFailed; } }, function(json){
+                got = json; return json;
               }).then(function(r){
-                logLine("batch " + (idx + 1) + " of " + batches.length + " received via Key " + r.keyNo + (r.model !== GEMINI_MODELS[0] ? " (" + r.model + ")" : ""), "ok");
-                batchOpps.forEach(function(o){ avoid.push(conceptDigest(o)); });
-              }, function(err){
-                logLine("batch " + (idx + 1) + " of " + batches.length + " could not be written by any key or model — those " + batchOpps.length + " opportunities will use locally built prompts; the run continues", "warn");
+                var check = applyBatchChecked(batchOpps, got);
+                if (check.ok) return r;
+                var e = new Error("gemini-batch-invalid");
+                e.invalidFails = check.fails;
+                throw e;
               });
+            }
+            function batchDone(r, viaCorrection){
+              lastWin = { ki: r.ki, mi: r.mi };
+              promptsDone += batchOpps.length;
+              logLine("batch " + (bIdx + 1) + " of " + queue.length + " received via Key " + r.keyNo + (r.model !== GEMINI_MODELS[0] ? " (" + r.model + ")" : "") + (viaCorrection ? " — after one corrected re-ask" : ""), "ok");
+              batchOpps.forEach(function(o){ avoid.push(conceptDigest(o)); });
+            }
+            function batchFail(cause){
+              promptsFailed = true;
+              if (!failLineLogged){
+                failLineLogged = true;
+                logLine("batch " + (bIdx + 1) + " of " + queue.length + " could not be finished by Gemini — stopping the run here; nothing is saved and no backup prompts are used", "err");
+              }
+              throw promptsFailError(cause);
+            }
+            return attempt(basePrompt).then(function(r){
+              batchDone(r, false);
+            }, function(err){
+              /* Validation gate: an answer whose prompts fail the accuracy
+                 checks earns exactly ONE corrected re-ask — the same batch,
+                 with the failed checks named in plain terms — inside the
+                 batch budget and the run clock. A local substitute is
+                 never an option: if the re-ask fails too, the run fails. */
+              if (err && err.message === "gemini-batch-invalid" && !promptsFailed && budgetLeft() > 3000){
+                logLine("batch " + (bIdx + 1) + " of " + queue.length + " — some prompts failed the accuracy checks (" + err.invalidFails.join("; ") + "); asking Gemini once more with the corrections", "warn");
+                var corr = basePrompt + "\n\nCORRECTION — your previous answer for these opportunities contained invalid prompts: " + err.invalidFails.join("; ") + ". Return the complete JSON for these opportunities again: every prompt a complete JSON object with all 9 fields, a colour palette of real hex values, metadata with a title, a description, a category and at least 3 tags, scenes that match each opportunity's own title exactly, and video prompts with real motion, a named camera movement and a start-to-end progression.";
+                return attempt(corr).then(function(r2){ batchDone(r2, true); }, function(err2){ batchFail(err2); });
+              }
+              batchFail(err);
             });
-          });
-          return seq.then(function(){ return { run: run, keyNo: briefRes.keyNo, model: briefRes.model }; });
+          }
+          function worker(){
+            if (promptsFailed) return Promise.resolve();
+            if (nextIdx >= queue.length) return Promise.resolve();
+            if (Date.now() >= runDeadline){
+              /* The 4-minute clock expired with batches still unwritten:
+                 the run fails honestly, inside the clock — unwritten
+                 prompts are never filled in locally. */
+              promptsFailed = true;
+              return Promise.reject(promptsFailError(null));
+            }
+            var batchOpps = queue[nextIdx];
+            var bIdx = nextIdx;
+            nextIdx += 1;
+            return runBatch(batchOpps, bIdx).then(worker);
+          }
+          var workers = [];
+          for (var wi = 0; wi < Math.min(POOL_SIZE, queue.length); wi++) workers.push(worker());
+          return Promise.all(workers).then(function(){ return { run: run, keyNo: briefRes.keyNo, model: briefRes.model }; });
         });
         runPromise.then(function(doneRes){
           var run = doneRes.run;
@@ -6095,6 +6403,16 @@
           toast(det ? msg + " Google said: " + (det.length > 130 ? det.slice(0, 130) + "…" : det) : msg);
         });
       }
+
+      /* ================= VISITOR COUNTER (unique per browser) ================= */
+      (function visitors(){
+        var n = 0;
+        try {
+          n = parseInt(localStorage.getItem("sri_mock2_uv") || "0", 10) || 0;
+          if (!localStorage.getItem("sri_mock2_counted")){ n += 1; localStorage.setItem("sri_mock2_uv", String(n)); localStorage.setItem("sri_mock2_counted", "1"); }
+        } catch (e) { n = n || 1; }
+        $("visitorCount").textContent = n.toLocaleString("en-US");
+      })();
 
       /* ================= VISITOR COUNTER (unique per browser) ================= */
       (function visitors(){
