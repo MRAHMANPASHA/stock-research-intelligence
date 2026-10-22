@@ -3813,12 +3813,12 @@
         { f: "assets/ev/bbq2-01.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-01.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/eggs2-01.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
-        { f: "assets/ev/steak2-04.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
-        { f: "assets/ev/steak2-05.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-01.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-02.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/bread2-02.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/bbq2-02.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/cheesecake2-01.jpg", t: "cheesecake cafe", c: "Food & Drink" },
-        { f: "assets/ev/steak2-06.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-03.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/eggs2-02.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
         { f: "assets/ev/bbq2-03.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-03.jpg", t: "artisan bread bakery", c: "Food & Drink" },
@@ -6403,16 +6403,6 @@
           toast(det ? msg + " Google said: " + (det.length > 130 ? det.slice(0, 130) + "…" : det) : msg);
         });
       }
-
-      /* ================= VISITOR COUNTER (unique per browser) ================= */
-      (function visitors(){
-        var n = 0;
-        try {
-          n = parseInt(localStorage.getItem("sri_mock2_uv") || "0", 10) || 0;
-          if (!localStorage.getItem("sri_mock2_counted")){ n += 1; localStorage.setItem("sri_mock2_uv", String(n)); localStorage.setItem("sri_mock2_counted", "1"); }
-        } catch (e) { n = n || 1; }
-        $("visitorCount").textContent = n.toLocaleString("en-US");
-      })();
 
       /* ================= VISITOR COUNTER (unique per browser) ================= */
       (function visitors(){
