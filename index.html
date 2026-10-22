@@ -5564,36 +5564,59 @@
       /* Model fallback chain (live-verified): the older 2.5/2.0/1.5 flash models are
          retired by Google and answer 404, which used to kill every run at step one.
          These current models are tried in order — any error moves to the next model,
-         and only when all of them fail does the next saved key take over. */
-      var GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
-      /* HARD CLOCK FOR A WHOLE RUN: generation — the brief call plus every
-         prompt batch — may never run past 240 seconds from the moment the
-         brief call starts. The target is a 2-4 minute run, never more:
-         every budget below lives inside this clock, each batch's budget is
-         capped at whatever clock time remains, and when the clock expires
-         with batches still unwritten the run FAILS honestly — every prompt
-         must come from Gemini, so nothing is ever filled in locally and
-         nothing is saved — and no Gemini call is ever started after it. */
-      var GEMINI_RUN_BUDGET_MS = 240000;
-      /* Per-attempt cap for the brief call: if Gemini has not answered
-         within this time, the attempt is aborted and the chain moves to
-         the next model, so one silent connection can never park a run. */
-      var GEMINI_TIMEOUT_MS = 45000;
-      /* Total budget for the brief call across all of its attempts and
-         passes. The brief is essential, but if it cannot be obtained
-         inside 75s the run fails fast with the real reason — brief
-         retries never get to eat the whole 240s clock. */
-      var GEMINI_BRIEF_BUDGET_MS = 75000;
+         and only when all of them fail does the next saved key take over.
+         gemini-3.6-flash LEADS (user order, 2026-10-22): it is the model the
+         user's own keys answer on today. The tight-quota Flash model that
+         used to sit in this chain was removed from it entirely — Google's
+         own 429 message reported a free limit of just 5 requests/minute
+         for it. */
+      var GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+      var GEMINI_LITE_MI = GEMINI_MODELS.indexOf("gemini-3.1-flash-lite");
+      /* BRIEF MODEL ORDER: in the brief call the lite model moves up to
+         second place — flagship first, then lite, then the remaining
+         flagships. When the flagship is healthy it still answers first
+         and nothing changes; when it stalls, the chain reaches the model
+         with the largest free quota (the one that historically still
+         answers during high-demand waves) second instead of last. Batch
+         chains keep the normal order (winning model first) — their
+         bad-weather path is the lite-first rescue pass in runChain. */
+      var GEMINI_BRIEF_ORDER = [0, GEMINI_LITE_MI, 1, 2].filter(function(m, i, a){ return m >= 0 && a.indexOf(m) === i; });
+      /* Quick key sweep before the brief chain: one flagship attempt,
+         capped at 30s, on each of the first up-to-3 live keys (see
+         sweepBriefCall inside startLiveRun), so a large key pool reaches
+         a healthy key fast instead of deep-walking one slow key. */
+      var GEMINI_SWEEP_TIMEOUT_MS = 30000;
+      /* SAFETY CEILING FOR A WHOLE RUN: 20 minutes from the moment the
+         brief call starts. PATIENT MODE (user order, 2026-10-22): a slow
+         run that COMPLETES beats a fast run that fails — when Google is
+         slow or busy the tool waits and keeps retrying instead of
+         executing the run on a short clock. This ceiling exists only to
+         stop a literal infinite hang; reaching it is the only clock-based
+         failure. When it expires with batches still unwritten the run
+         FAILS honestly — every prompt must come from Gemini, so nothing
+         is ever filled in locally and nothing is saved. */
+      var GEMINI_RUN_BUDGET_MS = 1200000;
+      /* Per-attempt cap for the brief call: 90 seconds. On a slow-Google
+         day a healthy model can legitimately need 70-80s to answer, and
+         in patient mode that answer is worth waiting for — the attempt
+         is only aborted at 90s, then the chain moves to the next pair. */
+      var GEMINI_TIMEOUT_MS = 90000;
+      /* Total ceiling for the brief call across all of its attempts and
+         passes: 10 minutes. A full pass with no answer waits 15s and
+         walks the chain again (up to 4 passes, see runChain) — the brief
+         only fails when this whole ceiling is genuinely exhausted. */
+      var GEMINI_BRIEF_BUDGET_MS = 600000;
       /* Prompt batches are written CONCURRENTLY — a pool of 3 workers,
-         each writing one batch of 3 opportunities — so their per-attempt
-         cap is tighter still: a batch that cannot answer within 40s is
-         output-bound and rarely saves itself by waiting longer. */
-      var GEMINI_BATCH_TIMEOUT_MS = 40000;
-      /* Hard wall-clock budget for ONE prompt batch, across every key,
-         model and retry pass it tries (and never past the run's clock).
-         When it runs out, the batch — and with it the whole run — fails
-         honestly: no prompt is ever written locally. */
-      var GEMINI_BATCH_BUDGET_MS = 100000;
+         each writing one batch of 3 opportunities. Their per-attempt cap
+         is the same patient 90s as the brief: a slow answer that lands
+         is worth far more than a fast failure. */
+      var GEMINI_BATCH_TIMEOUT_MS = 90000;
+      /* Ceiling for ONE prompt batch, across every key, model and retry
+         pass it tries (and never past the run's safety ceiling): 10
+         minutes, with 15s waits between chain passes. A batch fails the
+         run only when this whole ceiling is genuinely exhausted — and
+         then the run fails honestly: no prompt is ever written locally. */
+      var GEMINI_BATCH_BUDGET_MS = 600000;
       var LS_KEYS = "sri_gemini_keys";
       function getKeys(){
         try {
@@ -5978,7 +6001,7 @@
       }
       function friendlyGeminiError(err){
         if (err && err.promptsFailed) return "Google could not finish the prompts in time — no backup or template prompts are used, so nothing was saved. Please try again in a little while.";
-        if (err && err.budgetExhausted) return "Gemini is answering very slowly right now — the brief call used up its 75-second time budget without an answer from any model, so the run was stopped fast instead of hanging. Nothing is wrong with your key; please run the research again in a little while.";
+        if (err && err.budgetExhausted) return "Gemini is answering very slowly right now — this step was retried patiently for 10 minutes without an answer from any model, so the run was stopped. Nothing is wrong with your key; please run the research again in a little while.";
         if (err && err.timedOut) return "Gemini took too long to answer — every model we tried went past the time limit. Nothing is wrong with your key; please run the research again.";
         if (err && err.status === 429) return "Your Gemini keys have hit their free limit for now. Wait a bit and try again — or add another key in Settings and it will be used automatically.";
         if (err && /location is not supported|not supported in your|user location/i.test(err.gmsg || "")) return "Google says the Gemini API is not available from your current location, so the key could not run. The exact reply from Google is in the run log above.";
@@ -6039,22 +6062,34 @@
            row shows the retry countdown instead of the batch/elapsed text, so
            the pause reads as the tool waiting on Google — never as a hang. */
         var retryEta = 0;
+        /* PHASE DISPLAY: the engine (sweep + chains) reports every attempt
+           through onAttempt/onPhase, and the current concrete phase lives
+           in phaseBase — e.g. "Building brief — Key 2 / gemini-3.7-flash ·
+           pass 2" or "Writing prompts — batch 2 of 5 · 6 of 15 ready ·
+           attempt on Key 1 / gemini-3.1-flash-lite". The parked step row
+           re-renders it every second with the run's elapsed time, so the
+           user always sees WHAT is happening right now — never a bare
+           "waiting". retryNoun names what a between-passes pause will
+           retry ("the brief" / "this prompt batch"). */
+        var phaseBase = "", retryNoun = "the brief", retryLabel = "", runT0 = Date.now(), lastBeat = -1;
         function startWaitClock(){
           var parked = stepEls[PARK_AT];
-          parked.querySelector(".st").textContent = "waiting";
-          logLine("the brief comes first, then the prompts are written in parallel batches — the whole run is capped at 4 minutes, and every prompt must come from Gemini: if Google cannot finish in time the run stops and nothing is saved (no backup prompts are ever used)");
+          parked.querySelector(".st").textContent = phaseBase || "waiting";
+          logLine("the brief comes first, then the prompts are written in parallel batches — if Google is slow the run waits patiently and keeps retrying (safety cap 20 minutes), and every prompt must come from Gemini: if Google truly cannot finish, the run stops and nothing is saved (no backup prompts are ever used)");
           waitTimer = setInterval(function(){
             waitSecs += 1;
+            var el = Math.max(0, Math.round((Date.now() - runT0) / 1000));
             var stEl = parked.querySelector(".st");
             if (retryEta > 0){
-              stEl.textContent = "Google busy — retry in " + retryEta + "s";
+              stEl.textContent = retryLabel ? (retryLabel + retryEta + "s") : ("Google is slow — retrying " + retryNoun + " in " + retryEta + "s");
             } else if (parked.classList.contains("run")){
-              stEl.textContent = promptsTotal ? (promptsDone + " of " + promptsTotal + " ready · " + waitSecs + "s") : ("waiting · " + waitSecs + "s");
+              stEl.textContent = phaseBase ? (phaseBase + " · " + el + "s") : ("waiting · " + el + "s");
             }
-            if (waitSecs % 15 === 0){
-              if (retryEta > 0) logLine("Google is still busy — next attempt in " + retryEta + "s");
-              else if (promptsTotal) logLine("writing prompts — " + promptsDone + " of " + promptsTotal + " ready · " + waitSecs + "s elapsed");
-              else logLine("still working — waiting for Gemini's answer · " + waitSecs + "s elapsed");
+            if (el > 0 && el % 15 === 0 && el !== lastBeat){
+              lastBeat = el;
+              if (retryEta > 0) logLine(retryLabel ? (retryLabel + retryEta + "s") : ("Google is slow — retrying " + retryNoun + " in " + retryEta + "s"), "warn");
+              else if (phaseBase) logLine("still working — " + phaseBase + " · " + el + "s elapsed");
+              else logLine("still working — waiting for Gemini's answer · " + el + "s elapsed");
             }
           }, 1000);
         }
@@ -6112,7 +6147,28 @@
         keys.forEach(function(k, i){ if (isKeyDead(k)) deadKeyIdx[i] = true; });
         var skipPairs429 = {};
         var demotedPairs = {};
+        /* POLITE CALLING state (see tryPair): at most one call in flight
+           per key across all workers (keyBusy), at least 3s between
+           attempt starts on the same key (keyLastStart), and a per-key
+           pause until Google's own 429 retry hint has passed
+           (keyReadyAt). Three workers firing huge calls at the same
+           instant — and converging on one winning key — blew the free
+           tier's per-minute limits even on healthy keys; spaced, single,
+           hint-respecting calls succeed on the very same keys. */
+        var keyBusy = {}, keyLastStart = {}, keyReadyAt = {};
         function pairId(ki, mi){ return ki + ":" + mi; }
+        /* A (key, model) pair that answered 429 is skipped for the rest
+           of the current pass; from the next pass on it is re-admitted
+           once its limit window (stored in skipPairs429 as an expiry
+           timestamp — Google's stated retry delay, or 60s when none was
+           stated) has passed. Dead (403-denied) keys are never
+           re-admitted within a run. */
+        function pairSkipped429(ki, mi, passNo){
+          var exp = skipPairs429[pairId(ki, mi)];
+          if (!exp) return false;
+          if (passNo >= 2 && Date.now() >= exp) return false;
+          return true;
+        }
         function errDetail(err){
           if (!err) return "";
           if (err.budgetExhausted) return "this step used up its whole time budget — every attempt together took too long";
@@ -6144,11 +6200,14 @@
            Each call still walks the whole chain from its start pair,
            falling over to the next model and then the next key on failure;
            with a single saved key every call simply starts on that key. */
-        function chainPairs(startPair){
+        function chainPairs(startPair, modelOrder, passNo){
+          var order = (modelOrder && modelOrder.length) ? modelOrder : GEMINI_MODELS.map(function(_, ix){ return ix; });
           var all = [];
           for (var ki = 0; ki < keys.length; ki++)
-            for (var mi = 0; mi < GEMINI_MODELS.length; mi++)
-              if (!deadKeyIdx[ki] && !skipPairs429[pairId(ki, mi)]) all.push([ki, mi]);
+            for (var oi = 0; oi < order.length; oi++){
+              var mi = order[oi];
+              if (!deadKeyIdx[ki] && !pairSkipped429(ki, mi, passNo || 1)) all.push([ki, mi]);
+            }
           if (startPair && all.length > 1){
             var sk = Math.max(0, Math.min(startPair.ki || 0, keys.length - 1));
             var sm = Math.max(0, Math.min(startPair.mi || 0, GEMINI_MODELS.length - 1));
@@ -6177,24 +6236,23 @@
            opts.shouldStop: once it reports true, no further attempt (and
            no retry pass) is started — how a failed prompt batch halts the
            other workers' chains without waiting for their timeouts. */
-        /* Auto-retry passes: Google sometimes answers 503 "high demand" (or 429)
-           on EVERY model at the same moment — a demand spike that usually
-           clears within seconds, but one pass over the chain used to end the
-           run on it. isTransientErr recognises exactly those temporary
-           failures; when a whole pass over all keys x models fails with
-           nothing else, the chain waits about 15 seconds — the parked step
-           row counts the pause down via retryEta and the log says why — then
-           runs the pass again, up to opts.maxPasses passes in total (the
-           brief gets 3, a prompt batch gets 2 — one extra pass, and only
-           inside its budget). A pass hit by any non-transient error (bad
-           key, unreadable answer, timeout) is NOT retried: the call ends at
-           once with the real error. Success on any pass continues the run
-           exactly as before. This wraps every call — the brief call and
-           each prompt-batch call alike. */
-        function isTransientErr(err){
-          if (!err) return false;
-          if (err.status === 503 || err.status === 429) return true;
-          return /high demand|overload|unavailable|temporarily|try again later|resource.?exhausted/i.test((err.gmsg || "") + " " + (err.message || ""));
+        /* PATIENT RETRY PASSES: when a full pass over the chain yields no
+           answer — Google slow, a 503 high-demand wave, quotas, timeouts —
+           the call does NOT give up. It waits 15 seconds (the parked step
+           row counts the pause down via retryEta, amber, naming what will
+           be retried) and walks the chain again, up to opts.maxPasses
+           passes in total (the brief gets 4, a prompt batch gets 4), all
+           inside the call's ceiling. Patience ends only where retrying
+           the identical request cannot help: every key dead / no usable
+           pair left, a malformed-request error (HTTP 400/401 — a bad key
+           stays bad), another batch having already failed the run
+           (shouldStop), or the ceiling itself running out. Success on any
+           pass continues the run exactly as before. This wraps every
+           call — the brief call and each prompt-batch call alike. On the
+           healthy path no wait ever happens: waits exist only between
+           failed passes. */
+        function isHardErr(err){
+          return !!(err && (err.status === 400 || err.status === 401));
         }
         function chainWait(seconds){
           return new Promise(function(resolve){
@@ -6205,12 +6263,71 @@
             }, 1000);
           });
         }
+        function sleepMs(ms){
+          return new Promise(function(resolve){ setTimeout(resolve, ms); });
+        }
+        /* Google's 429 answers name their own pause ("Please retry in
+           9.06s") — parse it so the tool can honor it exactly. */
+        function parseRetryHint(err){
+          var m = /retry in\s+([\d.]+)\s*s/i.exec((err && err.gmsg) || "");
+          return m ? parseFloat(m[1]) : 0;
+        }
+        function keyHintWaitMs(ki){
+          return Math.max(0, (keyReadyAt[ki] || 0) - Date.now());
+        }
+        /* Wait out a key's retry-hint pause. Pauses over 5s are shown —
+           an amber log line naming the key, and the step row counts the
+           pause down; shorter ones pass silently. The wait is part of
+           the chain walk: it never consumes a retry pass. */
+        function keyHintWait(ki, ms){
+          var secs = Math.ceil(ms / 1000);
+          var loud = secs > 5;
+          if (loud){
+            retryLabel = "Key " + (ki + 1) + " hit its per-minute limit — Google asked for a pause · resuming in ";
+            retryEta = secs;
+            logLine("Key " + (ki + 1) + " hit its per-minute limit — Google asked to retry in " + secs + "s; waiting before the next attempt on this key", "warn");
+          }
+          return new Promise(function(resolve){
+            var iv = setInterval(function(){
+              var left = keyHintWaitMs(ki);
+              if (loud) retryEta = Math.max(0, Math.ceil(left / 1000));
+              if (left <= 0){ clearInterval(iv); if (loud) retryEta = 0; resolve(); }
+            }, 250);
+          });
+        }
+        /* LITE-FIRST RESCUE ORDER (prompt batches only, from the second
+           pass on): every live key's lite pair first, in round-robin key
+           order starting at the call's start key, then the remaining
+           pairs in their normal chain order. A batch only reaches its
+           second pass when the first pass failed everywhere — exactly
+           the bad-weather case, where lite (largest free quota, answers
+           when the flagships don't) must be tried first, not last. Dead
+           keys and quota-burned lite pairs stay excluded throughout. */
+        function rescuePairs(callOpts, passNo){
+          var startPair = callOpts.startPair;
+          var first = [], seen = {};
+          if (GEMINI_LITE_MI >= 0 && keys.length){
+            var sk = startPair ? Math.max(0, Math.min(startPair.ki || 0, keys.length - 1)) : 0;
+            for (var r = 0; r < keys.length; r++){
+              var ki = (sk + r) % keys.length;
+              if (deadKeyIdx[ki] || pairSkipped429(ki, GEMINI_LITE_MI, passNo || 2)) continue;
+              first.push([ki, GEMINI_LITE_MI]);
+              seen[pairId(ki, GEMINI_LITE_MI)] = true;
+            }
+          }
+          var rest = chainPairs(startPair, callOpts.modelOrder, passNo || 2).filter(function(p){ return p[1] !== GEMINI_LITE_MI && !seen[pairId(p[0], p[1])]; });
+          return first.concat(rest);
+        }
         function runChain(promptText, opts, onOk){
           var RETRY_WAIT_S = 15;
           var attemptCap = opts.attemptTimeoutMs;
           var deadline = Date.now() + opts.budgetMs;
           var maxPasses = opts.maxPasses || 1;
-          var pairs = chainPairs(opts.startPair);
+          function buildPairs(passNo){
+            if (opts.rescueLiteFirst && passNo >= 2) return rescuePairs(opts, passNo);
+            return chainPairs(opts.startPair, opts.modelOrder, passNo);
+          }
+          var pairs = buildPairs(1);
           if (!pairs.length){
             /* No usable pair at all — every saved key is flagged dead, or
                every remaining pair already hit its quota in this run. Fail
@@ -6229,31 +6346,82 @@
             return Promise.reject(de);
           }
           var pass = 0;
+          /* The key that most recently hit its limit in this call — when
+             the walk's next attempt lands on a different key, the log
+             says who is taking over (see tryPair). */
+          var last429Ki = -1;
           function budgetErr(){ var e = new Error("gemini-budget"); e.budgetExhausted = true; return e; }
           function onePass(){
             pass += 1;
+            if (pass > 1){
+              /* Each pass walks a freshly built pair list, so the keys
+                 and pairs this run has proved unusable since the pass
+                 started (dead keys, quota pairs, demotions) are already
+                 reflected — and a batch's later passes open in the
+                 lite-first rescue order (see rescuePairs). */
+              pairs = buildPairs(pass);
+              if (!pairs.length) return Promise.reject(lastErr || new Error("gemini-empty"));
+              if (opts.rescueLiteFirst) logLine("rescue pass — trying the lite model first on every key", "warn");
+            }
             var prevErr = lastErr;
             lastErr = null;
-            var passTransientOnly = true;
             function tryPair(pi){
               if (opts.shouldStop && opts.shouldStop()){ var se = new Error("gemini-stopped"); se.stopped = true; return Promise.reject(se); }
               /* A key can die, or a pair can hit its quota, WHILE this
                  call is walking the chain (a parallel worker may have
                  marked it): never start an attempt on a pair this run has
                  already proved unusable. */
-              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || skipPairs429[pairId(pairs[pi][0], pairs[pi][1])])) pi += 1;
+              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || pairSkipped429(pairs[pi][0], pairs[pi][1], pass))) pi += 1;
               if (pi >= pairs.length) return Promise.reject(lastErr || prevErr || new Error("gemini-empty"));
               var remaining = deadline - Date.now();
               if (remaining <= 0) return Promise.reject(budgetErr());
+              /* POLITE CALLING + FAILOVER ON LIMIT: pick the first pair
+                 whose key can take a call right now — not dead, not
+                 quota-skipped, not busy in another worker, and not
+                 resting out a 429 retry hint while another key is
+                 available: a limited key never makes the work wait
+                 while a free key exists, the chain simply moves to that
+                 key. If every remaining pair is blocked only by busy
+                 keys, poll briefly; if blocked only by hint pauses,
+                 wait out the shortest one (the budget check above still
+                 bounds every wait). */
+              var chosen = -1, anyBusy = false, hintKi = -1, hintMsMin = Infinity;
+              for (var scan = pi; scan < pairs.length; scan++){
+                var sk2 = pairs[scan][0];
+                if (deadKeyIdx[sk2] || pairSkipped429(sk2, pairs[scan][1], pass)) continue;
+                if (keyBusy[sk2]){ anyBusy = true; continue; }
+                var hMs = keyHintWaitMs(sk2);
+                if (hMs > 0){ if (hMs < hintMsMin){ hintMsMin = hMs; hintKi = sk2; } continue; }
+                chosen = scan; break;
+              }
+              if (chosen < 0){
+                if (anyBusy) return sleepMs(1000).then(function(){ return tryPair(pi); });
+                if (hintKi >= 0) return keyHintWait(hintKi, hintMsMin).then(function(){ return tryPair(pi); });
+                return Promise.reject(lastErr || prevErr || new Error("gemini-empty"));
+              }
+              pi = chosen;
               var ki = pairs[pi][0], mi = pairs[pi][1];
+              if (last429Ki >= 0 && ki !== last429Ki){
+                logLine("Key " + (last429Ki + 1) + " hit its limit — Key " + (ki + 1) + " is taking over", "warn");
+                last429Ki = -1;
+              }
+              /* Per-key pacing: at least 3s between attempt starts on
+                 the same key; a key's first attempt is never delayed.
+                 Silent — micro-pacing never reaches the log. */
+              var paceMs = keyLastStart[ki] ? (3000 - (Date.now() - keyLastStart[ki])) : 0;
+              if (paceMs > 0) return sleepMs(paceMs).then(function(){ return tryPair(pi); });
+              if (opts.onAttempt) opts.onAttempt(ki, mi, pass);
+              keyBusy[ki] = true;
+              keyLastStart[ki] = Date.now();
               return callGemini(keys[ki], GEMINI_MODELS[mi], promptText, Math.min(attemptCap, remaining)).then(function(res){
+                keyBusy[ki] = false;
                 var value = onOk(res.json);
                 if (opts.creditRun) recordKeyUsage(keys[ki], res.tokens); else recordKeyTokens(keys[ki], res.tokens);
                 return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[mi], ki: ki, mi: mi };
               }).catch(function(err){
+                keyBusy[ki] = false;
                 if (err && err.budgetExhausted) throw err;
                 lastErr = err;
-                if (!isTransientErr(err)) passTransientOnly = false;
                 if (isDeniedAccessErr(err)){
                   /* Denied access is permanent for that Google project:
                      flag the key dead (persisted across runs — see
@@ -6263,9 +6431,21 @@
                   if (markKeyDead(keys[ki])) logLine("Key " + (ki + 1) + " has been denied access by Google — it will be skipped from now on.", "warn");
                 } else if (err && err.status === 429){
                   markKeyQuota(keys[ki]);
-                  /* This (key, model) pair's quota is gone for this run —
-                     later chains skip the pair, never the whole key. */
-                  skipPairs429[pairId(ki, mi)] = true;
+                  last429Ki = ki;
+                  /* This (key, model) pair is skipped for the rest of
+                     this pass — never the whole key — and re-admitted
+                     in later passes once its limit window has passed
+                     (see pairSkipped429). When Google named a retry
+                     pause, the whole key also rests until it has passed
+                     (+1s buffer): while another key is free the walk
+                     fails over to it at once; the pause is only waited
+                     out when no free key remains (see tryPair). */
+                  var hintS = parseRetryHint(err);
+                  skipPairs429[pairId(ki, mi)] = Date.now() + (hintS > 0 ? Math.ceil(hintS + 1) * 1000 : 60000);
+                  if (hintS > 0){
+                    var until = Date.now() + Math.ceil(hintS + 1) * 1000;
+                    if (!keyReadyAt[ki] || keyReadyAt[ki] < until) keyReadyAt[ki] = until;
+                  }
                 } else if (err && (err.status === 503 || err.timedOut)){
                   /* Temporary failure: the pair stays usable, but later
                      chains in this run try untried pairs first. */
@@ -6285,17 +6465,81 @@
             return tryPair(0).catch(function(err){
               if (err && err.budgetExhausted) throw err;
               if (err && err.stopped) throw err;
-              if (pass < maxPasses && passTransientOnly){
+              if (isHardErr(err)) throw err;
+              if (pass < maxPasses && chainPairs(opts.startPair, opts.modelOrder, pass + 1).length){
                 var remainS = Math.floor((deadline - Date.now()) / 1000);
                 if (remainS < 2) throw budgetErr();
                 var waitS = Math.min(RETRY_WAIT_S, remainS);
-                logLine("Google is busy — every model is temporarily overloaded (503/429). Waiting " + waitS + "s, then trying again — attempt " + (pass + 1) + " of " + maxPasses, "warn");
+                retryNoun = opts.waitNoun || "the brief";
+                retryLabel = "Google is slow — retrying " + retryNoun + " in ";
+                logLine("Google is slow — retrying " + retryNoun + " in " + waitS + "s (pass " + (pass + 1) + " of " + maxPasses + ")", "warn");
                 return chainWait(waitS).then(onePass);
               }
               throw err;
             });
           }
           return onePass();
+        }
+        /* QUICK KEY SWEEP (brief only, before the chain): one flagship
+           attempt, capped at 30s, on each of the first up-to-3 live
+           (non-dead) keys. With a large key pool this reaches a healthy
+           key fast instead of deep-walking one slow key through every
+           model. A probe that answers IS the brief answer (credited to
+           its key like any brief call, and it becomes the run's winning
+           pair). Probe failures feed the same per-run memory as chain
+           failures — a denied key is flagged dead for good, a 429 burns
+           only that pair, a 503/timeout demotes the pair — so the chain
+           that follows never re-pays for what the sweep already learned.
+           One refinement: a probe that TIMES OUT ends the sweep at once.
+           A 30s silence is a global-slowness signal (during a slow wave
+           every key's flagship stalls the same way), so more flagship
+           probes would only burn the clock; the patient chain — lite
+           second, 90s caps — takes over instead. Fast failures
+           (403/429/503) move straight to the next key. If no probe
+           answers, the sweep resolves null and the normal brief chain
+           runs with its full 10-minute ceiling; the sweep is charged
+           only to the run's 20-minute safety ceiling. */
+        function sweepBriefCall(promptText, onOk, onPhase){
+          var order = [];
+          for (var i = 0; i < keys.length && order.length < 3; i++) if (!deadKeyIdx[i]) order.push(i);
+          var idx = 0, prev429Ki = -1;
+          function next(){
+            if (idx >= order.length) return Promise.resolve(null);
+            var ki = order[idx]; idx += 1;
+            if (prev429Ki >= 0 && ki !== prev429Ki){
+              logLine("Key " + (prev429Ki + 1) + " hit its limit — Key " + (ki + 1) + " is taking over", "warn");
+              prev429Ki = -1;
+            }
+            if (onPhase) onPhase(ki);
+            keyLastStart[ki] = Date.now();
+            return callGemini(keys[ki], GEMINI_MODELS[0], promptText, GEMINI_SWEEP_TIMEOUT_MS).then(function(res){
+              var value = onOk(res.json);
+              recordKeyUsage(keys[ki], res.tokens);
+              return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[0], ki: ki, mi: 0 };
+            }).catch(function(err){
+              lastErr = err;
+              if (isDeniedAccessErr(err)){
+                deadKeyIdx[ki] = true;
+                if (markKeyDead(keys[ki])) logLine("Key " + (ki + 1) + " has been denied access by Google — it will be skipped from now on.", "warn");
+              } else if (err && err.status === 429){
+                markKeyQuota(keys[ki]);
+                prev429Ki = ki;
+                var sHint = parseRetryHint(err);
+                skipPairs429[pairId(ki, 0)] = Date.now() + (sHint > 0 ? Math.ceil(sHint + 1) * 1000 : 60000);
+                if (sHint > 0){
+                  var sUntil = Date.now() + Math.ceil(sHint + 1) * 1000;
+                  if (!keyReadyAt[ki] || keyReadyAt[ki] < sUntil) keyReadyAt[ki] = sUntil;
+                }
+              } else if (err && (err.status === 503 || err.timedOut)){
+                demotedPairs[pairId(ki, 0)] = true;
+              }
+              var det = errDetail(err);
+              logLine("quick sweep — Key " + (ki + 1) + " / " + GEMINI_MODELS[0] + " could not answer" + (det ? " (" + det + ")" : ""), "warn");
+              if (err && err.timedOut) return Promise.resolve(null);
+              return next();
+            });
+          }
+          return next();
         }
         /* Check one batch answer against its opportunities WITHOUT writing
            anything into them yet: items are matched by exact title first,
@@ -6354,7 +6598,7 @@
            brief + opportunities (no prompts), then the prompts in batches of
            3 opportunities written CONCURRENTLY by a pool of 3 workers, every
            call on the key x model chain under its own budget (see runChain)
-           and never past the 240s run clock (GEMINI_RUN_BUDGET_MS, started
+           and never past the run's 20-minute safety ceiling (started
            the moment the brief call starts). Each batch opens on its
            round-robin key (batch 1 → Key 1, batch 2 → Key 2, batch 3 → Key 3,
            then rotating) paired with the most recent winning model, so the
@@ -6394,8 +6638,15 @@
           }
           return e;
         }
-        var runPromise = runChain(geminiBriefPrompt(topic, market, mix, horizon, want), { attemptTimeoutMs: GEMINI_TIMEOUT_MS, budgetMs: GEMINI_BRIEF_BUDGET_MS, maxPasses: 3, creditRun: true, startPair: { ki: 0, mi: 0 } }, function(json){
-          return buildLiveRun(json, topic, market, want, false);
+        var briefPromptText = geminiBriefPrompt(topic, market, mix, horizon, want);
+        function briefOnOk(json){ return buildLiveRun(json, topic, market, want, false); }
+        var runPromise = sweepBriefCall(briefPromptText, briefOnOk, function(ki){
+          phaseBase = "Building brief — quick key sweep · Key " + (ki + 1) + " / " + GEMINI_MODELS[0];
+        }).then(function(swept){
+          if (swept) return swept;
+          return runChain(briefPromptText, { attemptTimeoutMs: GEMINI_TIMEOUT_MS, budgetMs: GEMINI_BRIEF_BUDGET_MS, maxPasses: 4, creditRun: true, startPair: { ki: 0, mi: 0 }, modelOrder: GEMINI_BRIEF_ORDER, waitNoun: "the brief", onAttempt: function(ki, mi, p){
+            phaseBase = "Building brief — Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " · pass " + p;
+          } }, briefOnOk);
         }).then(function(briefRes){
           var run = briefRes.value;
           lastWin = { ki: briefRes.ki, mi: briefRes.mi };
@@ -6411,8 +6662,8 @@
             logLine("writing prompts — batch " + (bIdx + 1) + " of " + queue.length + " (" + batchOpps.map(function(o){ return o.title; }).join("; ") + ")");
             var basePrompt = geminiBatchPrompt(topic, market, mix, horizon, batchOpps, avoid.slice(), allTitles);
             var batchStart = Date.now();
-            /* What is left of this batch's own budget AND of the run's
-               240s clock — the corrected re-ask below lives inside both. */
+            /* What is left of this batch's own ceiling AND of the run's
+               20-minute safety ceiling — the re-ask below lives in both. */
             function budgetLeft(){
               return Math.min(GEMINI_BATCH_BUDGET_MS - (Date.now() - batchStart), runDeadline - Date.now());
             }
@@ -6424,7 +6675,9 @@
               var left = budgetLeft();
               if (left <= 0){ var be = new Error("gemini-budget"); be.budgetExhausted = true; return Promise.reject(be); }
               var got = null;
-              return runChain(promptText, { attemptTimeoutMs: GEMINI_BATCH_TIMEOUT_MS, budgetMs: left, maxPasses: 2, creditRun: false, startPair: { ki: bIdx % keys.length, mi: lastWin.mi }, shouldStop: function(){ return promptsFailed; } }, function(json){
+              return runChain(promptText, { attemptTimeoutMs: GEMINI_BATCH_TIMEOUT_MS, budgetMs: left, maxPasses: 4, creditRun: false, rescueLiteFirst: true, waitNoun: "this prompt batch", onAttempt: function(ki, mi, p){
+                phaseBase = "Writing prompts — batch " + (bIdx + 1) + " of " + queue.length + " · " + promptsDone + " of " + promptsTotal + " ready · attempt on Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + (p > 1 ? " · pass " + p : "");
+              }, startPair: { ki: bIdx % keys.length, mi: lastWin.mi }, shouldStop: function(){ return promptsFailed; } }, function(json){
                 got = json; return json;
               }).then(function(r){
                 var check = applyBatchChecked(batchOpps, got);
@@ -6464,13 +6717,18 @@
               batchFail(err);
             });
           }
-          function worker(){
+          function worker(startDelayMs){
+            /* Staggered starts (polite calling): the 3 workers begin
+               ~0s / 4s / 8s apart instead of firing their first huge
+               calls at the very same instant. Only the first pull is
+               delayed; later batches follow immediately. */
+            if (startDelayMs) return sleepMs(startDelayMs).then(function(){ return worker(0); });
             if (promptsFailed) return Promise.resolve();
             if (nextIdx >= queue.length) return Promise.resolve();
             if (Date.now() >= runDeadline){
-              /* The 4-minute clock expired with batches still unwritten:
-                 the run fails honestly, inside the clock — unwritten
-                 prompts are never filled in locally. */
+              /* The 20-minute safety ceiling expired with batches still
+                 unwritten: the run fails honestly — unwritten prompts
+                 are never filled in locally. */
               promptsFailed = true;
               return Promise.reject(promptsFailError(null));
             }
@@ -6480,7 +6738,7 @@
             return runBatch(batchOpps, bIdx).then(worker);
           }
           var workers = [];
-          for (var wi = 0; wi < Math.min(POOL_SIZE, queue.length); wi++) workers.push(worker());
+          for (var wi = 0; wi < Math.min(POOL_SIZE, queue.length); wi++) workers.push(worker(wi * 4000));
           return Promise.all(workers).then(function(){ return { run: run, keyNo: briefRes.keyNo, model: briefRes.model }; });
         });
         runPromise.then(function(doneRes){
