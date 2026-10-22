@@ -141,6 +141,7 @@
       .keyrow{ flex-wrap:wrap; }
       .keyrow .kstats{ flex-basis:100%; font-size:11px; color:var(--ink3); line-height:1.45; }
       .keyrow .kstats .kquota{ color:var(--amber); font-weight:700; }
+      .keyrow .kstats .kdead{ color:var(--red); font-weight:700; }
       .api-totals{ display:flex; flex-wrap:wrap; align-items:baseline; gap:5px 18px; background:var(--panel3); border:1px solid var(--line); border-radius:9px; padding:9px 12px 10px; margin-top:10px; font-size:12px; color:var(--ink2); }
       .api-totals .tlab{ flex-basis:100%; font-family:"JetBrains Mono",monospace; font-size:9.5px; letter-spacing:.16em; color:var(--ink3); }
       .api-totals b{ font-family:"JetBrains Mono",monospace; font-size:13.5px; color:var(--ink); }
@@ -5654,19 +5655,55 @@
         u[id] = e; saveUsage(u);
         renderApiBox();
       }
+      /* DEAD KEYS: a key whose Google project has been DENIED ACCESS (HTTP 403
+         "Your project has been denied access") can never answer on any model —
+         retrying it only burns the run's clock. The dead flag lives in the
+         same usage store as the tally above, keyed by the same one-way hash,
+         so it persists across runs in this browser: a dead key is skipped
+         from the very first call of every later run, and Settings shows it
+         as dead until the user removes it (removing a key deletes its usage
+         record, flag included — re-adding the key starts it clean). Returns
+         true only when the key was newly flagged, so the run log notes the
+         moment of death exactly once. A 403 that is NOT a denied-access
+         reply keeps the ordinary failover behaviour. */
+      function isDeniedAccessErr(err){
+        return !!(err && err.status === 403 && /denied access|access denied|has been denied/i.test(err.gmsg || ""));
+      }
+      function isKeyDead(key){
+        var u = getUsage()[keyHash(key)];
+        return !!(u && u.dead);
+      }
+      function markKeyDead(key){
+        var u = getUsage(), id = keyHash(key);
+        var e = u[id] || { runs: 0, tokens: 0, last: 0, quotaAt: 0 };
+        if (e.dead) return false;
+        e.dead = true; e.deadAt = Date.now();
+        u[id] = e; saveUsage(u);
+        renderApiBox();
+        return true;
+      }
       function renderApiBox(){
         var keys = getKeys();
         var st = $("apiStatus"), txt = $("apiStatusTxt");
         if (!st || !txt) return;
-        if (keys.length){
+        var usage = getUsage(), totRuns = 0, totTokens = 0;
+        /* Dead keys (denied access — see markKeyDead) no longer count as
+           connected: the status line reports only the keys that can
+           actually answer, and says plainly how many are dead. */
+        var deadN = 0;
+        keys.forEach(function(k){ var uu = usage[keyHash(k)]; if (uu && uu.dead) deadN += 1; });
+        var liveN = keys.length - deadN;
+        if (liveN > 0){
           st.classList.add("on");
-          txt.textContent = "Connected — " + keys.length + (keys.length === 1 ? " key" : " keys") + " saved in this browser";
+          txt.textContent = "Connected — " + liveN + (liveN === 1 ? " key" : " keys") + " ready" + (deadN ? " · " + deadN + (deadN === 1 ? " key was" : " keys were") + " denied access by Google" : "");
           var notice = $("apiNotice"); if (notice) notice.hidden = true;
+        } else if (keys.length){
+          st.classList.remove("on");
+          txt.textContent = "Saved keys were denied access by Google — remove them and add a working key";
         } else {
           st.classList.remove("on");
           txt.textContent = "Not connected";
         }
-        var usage = getUsage(), totRuns = 0, totTokens = 0;
         keys.forEach(function(k){
           var u = usage[keyHash(k)];
           if (u){ totRuns += u.runs || 0; totTokens += u.tokens || 0; }
@@ -5683,6 +5720,7 @@
           else
             stats = "Not used yet";
           if (u && u.quotaAt) stats += ' · <span class="kquota">limit hit ' + relTime(u.quotaAt) + "</span>";
+          if (u && u.dead) stats += ' · <span class="kdead">Access denied — dead key, remove it</span>';
           return '<div class="keyrow"><span class="kname">Key ' + (i + 1) + '</span><span class="kmask mono">••••••••' + esc(k.slice(-4)) + '</span>' +
             '<button type="button" class="kdel" data-delkey="' + i + '" aria-label="Remove Key ' + (i + 1) + '">Remove</button>' +
             '<span class="kstats">' + stats + "</span></div>";
@@ -6056,6 +6094,25 @@
           btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Run Research';
         }
         var lastErr = null;
+        /* PER-RUN KEY/PAIR MEMORY — the chain stops wasting attempts on
+           pairs this run has already proved unusable:
+           - deadKeyIdx: keys denied access by Google (HTTP 403). Seeded
+             from the persisted dead flags (see markKeyDead), so a key that
+             died in an earlier run is skipped from this run's first call;
+             a key denied mid-run joins the set the moment it happens and
+             every worker checks the set before each attempt.
+           - skipPairs429: (key, model) pairs that answered 429 in THIS
+             run. Quotas are per model/metric (Google's own reply names
+             the model), so only that pair is skipped — the same key's
+             other models stay in the chain.
+           - demotedPairs: (key, model) pairs that failed in this run
+             with a temporary error (503 / timeout). Not skipped — later
+             chains place them after every pair not yet tried. */
+        var deadKeyIdx = {};
+        keys.forEach(function(k, i){ if (isKeyDead(k)) deadKeyIdx[i] = true; });
+        var skipPairs429 = {};
+        var demotedPairs = {};
+        function pairId(ki, mi){ return ki + ":" + mi; }
         function errDetail(err){
           if (!err) return "";
           if (err.budgetExhausted) return "this step used up its whole time budget — every attempt together took too long";
@@ -6090,7 +6147,8 @@
         function chainPairs(startPair){
           var all = [];
           for (var ki = 0; ki < keys.length; ki++)
-            for (var mi = 0; mi < GEMINI_MODELS.length; mi++) all.push([ki, mi]);
+            for (var mi = 0; mi < GEMINI_MODELS.length; mi++)
+              if (!deadKeyIdx[ki] && !skipPairs429[pairId(ki, mi)]) all.push([ki, mi]);
           if (startPair && all.length > 1){
             var sk = Math.max(0, Math.min(startPair.ki || 0, keys.length - 1));
             var sm = Math.max(0, Math.min(startPair.mi || 0, GEMINI_MODELS.length - 1));
@@ -6098,7 +6156,14 @@
             for (var i = 0; i < all.length; i++){ if (all[i][0] === sk && all[i][1] === sm){ at = i; break; } }
             if (at > 0) all = all.slice(at).concat(all.slice(0, at));
           }
-          return all;
+          /* Demotion: pairs that already failed in this run with a
+             temporary error (503 / timeout) move behind every pair that
+             has not been tried yet — relative order otherwise unchanged,
+             so the round-robin start and the winning-model-first rule
+             still decide among the fresh pairs. */
+          var fresh = [], demoted = [];
+          all.forEach(function(p){ (demotedPairs[pairId(p[0], p[1])] ? demoted : fresh).push(p); });
+          return fresh.concat(demoted);
         }
         /* HARD TIME BUDGET: every call also carries a total wall-clock
            budget (opts.budgetMs) shared by all of its attempts and retry
@@ -6146,15 +6211,38 @@
           var deadline = Date.now() + opts.budgetMs;
           var maxPasses = opts.maxPasses || 1;
           var pairs = chainPairs(opts.startPair);
+          if (!pairs.length){
+            /* No usable pair at all — every saved key is flagged dead, or
+               every remaining pair already hit its quota in this run. Fail
+               with the last real Google answer when there is one, so the
+               run still ends with the honest reason instead of a made-up
+               one. */
+            var de = new Error("gemini-no-usable-pairs");
+            if (lastErr){
+              if (lastErr.status) de.status = lastErr.status;
+              if (lastErr.gmsg) de.gmsg = lastErr.gmsg;
+              if (lastErr.timedOut) de.timedOut = true;
+            } else {
+              de.status = 403;
+              de.gmsg = "Your project has been denied access. Please contact support.";
+            }
+            return Promise.reject(de);
+          }
           var pass = 0;
           function budgetErr(){ var e = new Error("gemini-budget"); e.budgetExhausted = true; return e; }
           function onePass(){
             pass += 1;
+            var prevErr = lastErr;
             lastErr = null;
             var passTransientOnly = true;
             function tryPair(pi){
               if (opts.shouldStop && opts.shouldStop()){ var se = new Error("gemini-stopped"); se.stopped = true; return Promise.reject(se); }
-              if (pi >= pairs.length) return Promise.reject(lastErr || new Error("gemini-empty"));
+              /* A key can die, or a pair can hit its quota, WHILE this
+                 call is walking the chain (a parallel worker may have
+                 marked it): never start an attempt on a pair this run has
+                 already proved unusable. */
+              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || skipPairs429[pairId(pairs[pi][0], pairs[pi][1])])) pi += 1;
+              if (pi >= pairs.length) return Promise.reject(lastErr || prevErr || new Error("gemini-empty"));
               var remaining = deadline - Date.now();
               if (remaining <= 0) return Promise.reject(budgetErr());
               var ki = pairs[pi][0], mi = pairs[pi][1];
@@ -6166,7 +6254,23 @@
                 if (err && err.budgetExhausted) throw err;
                 lastErr = err;
                 if (!isTransientErr(err)) passTransientOnly = false;
-                if (err && err.status === 429) markKeyQuota(keys[ki]);
+                if (isDeniedAccessErr(err)){
+                  /* Denied access is permanent for that Google project:
+                     flag the key dead (persisted across runs — see
+                     markKeyDead), drop it from every chain for the rest
+                     of this run, and say so in the log exactly once. */
+                  deadKeyIdx[ki] = true;
+                  if (markKeyDead(keys[ki])) logLine("Key " + (ki + 1) + " has been denied access by Google — it will be skipped from now on.", "warn");
+                } else if (err && err.status === 429){
+                  markKeyQuota(keys[ki]);
+                  /* This (key, model) pair's quota is gone for this run —
+                     later chains skip the pair, never the whole key. */
+                  skipPairs429[pairId(ki, mi)] = true;
+                } else if (err && (err.status === 503 || err.timedOut)){
+                  /* Temporary failure: the pair stays usable, but later
+                     chains in this run try untried pairs first. */
+                  demotedPairs[pairId(ki, mi)] = true;
+                }
                 var det = errDetail(err);
                 var nx = pairs[pi + 1];
                 if (nx){
