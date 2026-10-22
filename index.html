@@ -256,6 +256,11 @@
       @keyframes sp{ to{ transform:rotate(360deg) } }
       .log{ margin-top:14px; background:#04070b; border:1px solid var(--line); border-radius:9px; padding:11px 14px; font-family:"JetBrains Mono",monospace; font-size:11.5px; line-height:1.9; color:var(--ink3); max-height:132px; overflow:auto; }
       .log .ok{ color:var(--green); }
+      .log[hidden]{ display:none; }
+      .log-toggle{ display:block; margin-top:12px; padding:2px 0; background:none; border:none; font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.08em; color:var(--ink3); cursor:pointer; }
+      .log-toggle:hover{ color:var(--ink2); }
+      .log-toggle::after{ content:"▾"; margin-left:5px; font-size:9px; }
+      .log-toggle[aria-expanded="true"]::after{ content:"▴"; }
       .pipe-actions{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
       .pipe-actions[hidden]{ display:none; }
 
@@ -644,11 +649,12 @@
                   <div class="pipe-top"><b id="pipeTitle">Researching…</b><span class="mono" id="pipePct">0%</span></div>
                   <div class="bar"><i id="pipeBar"></i></div>
                   <div class="steps" id="pipeSteps"></div>
-                  <div class="log" id="pipeLog"></div>
+                  <div class="log" id="pipeLog" hidden></div>
                   <div class="pipe-actions" id="pipeActions" hidden>
                     <button class="btn primary" id="pipeResumeBtn" type="button">Resume</button>
                     <button class="btn" id="pipeStartOverBtn" type="button">Start over — discard kept batches</button>
                   </div>
+                  <button class="log-toggle" id="pipeLogToggle" type="button" aria-expanded="false" aria-controls="pipeLog">Details</button>
                 </div>
               </div>
 
@@ -1924,6 +1930,7 @@
         var stepsEl = $("pipeSteps"), logEl = $("pipeLog");
         stepsEl.innerHTML = PIPE_STEPS.map(function(s){ return '<div class="step"><span class="ic">·</span><span>' + s.label + '</span><span class="st"></span></div>'; }).join("");
         logEl.innerHTML = "";
+        collapsePipeLog();
         pipe.scrollIntoView({ behavior: "smooth", block: "nearest" });
         var stepEls = stepsEl.querySelectorAll(".step");
         var i = 0;
@@ -6188,6 +6195,7 @@
         var stepsEl = $("pipeSteps"), logEl = $("pipeLog");
         stepsEl.innerHTML = LIVE_STEPS.map(function(s){ return '<div class="step"><span class="ic">·</span><span>' + s.label + '</span><span class="st"></span></div>'; }).join("");
         logEl.innerHTML = "";
+        collapsePipeLog();
         pipe.scrollIntoView({ behavior: "smooth", block: "nearest" });
         var stepEls = stepsEl.querySelectorAll(".step");
         /* Log colours: "ok" green = received / complete; "warn" amber = a
@@ -7294,6 +7302,29 @@
             })
             .catch(function () {});
         } catch (e) {}
+      })();
+
+      /* ================= RUN LOG — DIAGNOSTICS, BEHIND "DETAILS" =================
+         The live log keeps collecting every line in the background exactly
+         as before (same lines, same order) — it is simply not shown by
+         default: raw HTTP errors and key/model internals are diagnostics,
+         not user copy. The one way to see it is the discreet "Details"
+         toggle at the bottom of the run card; every new run starts with
+         it collapsed again. */
+      function collapsePipeLog(){
+        var l = $("pipeLog"), t = $("pipeLogToggle");
+        if (l) l.hidden = true;
+        if (t) t.setAttribute("aria-expanded", "false");
+      }
+      (function wireLogToggle(){
+        var t = $("pipeLogToggle"), l = $("pipeLog");
+        if (!t || !l) return;
+        t.addEventListener("click", function(){
+          var open = l.hidden;
+          l.hidden = !open;
+          t.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) l.scrollTop = l.scrollHeight;
+        });
       })();
 
       /* ================= CLOCK & INIT ================= */
