@@ -5613,7 +5613,7 @@
       /* TIME BUDGETS ARE PER BATCH (user order, 2026-10-22 evening —
          "hr batch ko complete time mily"): every prompt batch (and every
          split part) carries its OWN full allowance — the whole pool
-         walked with full attempt caps (180s at batch size, 90s for
+         walked with full attempt caps (180s at batch size, 150s for
          single opportunities — see GEMINI_BATCH_TIMEOUT_MS) and the
          full pass budget in
          GEMINI_BATCH_BUDGET_MS — no matter how long the batches before
@@ -5646,11 +5646,21 @@
          fixed 90s cap cut them off mid-generation and logged the key
          as "no answer" even though the SAME keys answer fine in the
          user's other tool, which sends lighter calls and waits.
-         Batch-size attempts therefore get 180s; single-opportunity
-         calls (about a third of the generation) keep 90s; the brief
-         keeps its own 90s (GEMINI_TIMEOUT_MS above). */
+         Batch-size attempts therefore get 180s; the brief keeps its
+         own 90s (GEMINI_TIMEOUT_MS above). PER-OPPORTUNITY TIME
+         (permanent rule, user order 2026-10-22 late night — "hr
+         opportunity ko time dena hai, ye na ho wo response kr rha ho
+         or time out ho jay"): single-opportunity attempts get 150s,
+         raised from 90s, so a generation that is actively being
+         produced is not cut mid-response; and a timeout NEVER marks
+         an opportunity failed — it only cools that one (key, model)
+         pair for the rest of the unit and shifts the walk to the
+         next non-cooling pair (see PAIR COOLING in runChain). Each
+         split part owns a fully independent budget: its own passes
+         and full per-attempt caps, unaffected by sibling parts and
+         by any time already spent at batch size. */
       var GEMINI_BATCH_TIMEOUT_MS = 180000;
-      var GEMINI_SINGLE_TIMEOUT_MS = 90000;
+      var GEMINI_SINGLE_TIMEOUT_MS = 150000;
       /* Ceiling for ONE prompt batch, across every key, model and retry
          pass it tries (and never past the run's safety ceiling): 10
          minutes, with 15s waits between chain passes. A batch fails the
@@ -6376,6 +6386,17 @@
         keys.forEach(function(k, i){ if (isKeyDead(k)) deadKeyIdx[i] = true; });
         var skipPairs429 = {};
         var demotedPairs = {};
+        /* PAIR-COOLING RETURN NOTES (permanent rule, 2026-10-22 late
+           night): whenever a (key, model) pair starts cooling — a 429
+           window opens, or a timeout cools it for the rest of a unit —
+           a note is left here. The next time any chain actually
+           attempts that pair again (its window has passed, or a later
+           unit has begun — IN THE SAME RUN, no new run needed) the
+           log says "Key N / model is back" and the note is cleared.
+           Cooling is scoped to the pair and to its window only: it is
+           never a demotion and never outlives its term, so the pair
+           returns at its natural place in the order on its own. */
+        var pairCoolNote = {};
         /* MODEL PROBE results (see probeLeadModel): models that were
            probed at this run's start and never answered, on any probed
            key. They are demoted for the whole run — chainPairs places
@@ -6442,16 +6463,22 @@
            hint-respecting calls succeed on the very same keys. */
         var keyBusy = {}, keyLastStart = {}, keyReadyAt = {};
         function pairId(ki, mi){ return ki + ":" + mi; }
-        /* A (key, model) pair that answered 429 is skipped for the rest
-           of the current pass; from the next pass on it is re-admitted
-           once its limit window (stored in skipPairs429 as an expiry
-           timestamp — Google's stated retry delay, or 60s when none was
-           stated) has passed. Dead (403-denied) keys are never
+        /* A (key, model) pair that answered 429 is skipped while its
+           limit window (stored in skipPairs429 as an expiry timestamp —
+           Google's stated retry delay, or 60s when none was stated) is
+           still running; the moment the window passes, the pair is
+           re-admitted AUTOMATICALLY at its natural place in the order,
+           in any later pass or unit of the same run — cooling expires
+           on its own and never needs a new run (permanent rule,
+           2026-10-22 late night; see pairCoolNote for the "is back"
+           log). A pair appears at most once in any single pass list,
+           so expiry-based re-admission can never re-try it inside the
+           pass that limited it. Dead (403-denied) keys are never
            re-admitted within a run. */
         function pairSkipped429(ki, mi, passNo){
           var exp = skipPairs429[pairId(ki, mi)];
           if (!exp) return false;
-          if (passNo >= 2 && Date.now() >= exp) return false;
+          if (Date.now() >= exp) return false;
           return true;
         }
         function errDetail(err){
@@ -6465,8 +6492,16 @@
         }
         /* One call through the key x model chain: ANY failure on a model — 404 retired
            model, 429 limit, 503 high demand, a timeout, an unreadable answer — moves
-           straight to the next model on the same key; only when every model has failed
-           does the next key take over. onOk shapes the raw answer and may throw to keep
+           the walk to the next pair in the chain's order. For the brief (key-major
+           order) that is the next model on the same key first, and the next key only
+           when every model has failed. For prompts-phase units (opts.keyCycle) the
+           PERMANENT SHIFT RULE governs instead (user order, 2026-10-22 late night):
+           the walk cycles keys on the lead model, a limit OR a timeout cools only
+           that (key, model) pair — a 429 for Google's stated window, a timeout for
+           the rest of the unit — and the next attempt is the next non-cooling pair,
+           so a shift always lands on another key before any model rotation; cooled
+           pairs return automatically when their term ends (see pairCoolNote).
+           onOk shapes the raw answer and may throw to keep
            the chain moving (a malformed answer retries like any other failure). Every
            successful call credits its tokens to the key that answered; the brief call
            (creditRun) also counts as the run in the usage tally. */
@@ -6489,14 +6524,31 @@
            chain from its start pair, falling over to the next model and
            then the next key on failure; with a single saved key every
            call simply starts on that key. */
-        function chainPairs(startPair, modelOrder, passNo){
+        function chainPairs(startPair, modelOrder, passNo, keyCycle){
           var order = (modelOrder && modelOrder.length) ? modelOrder : GEMINI_MODELS.map(function(_, ix){ return ix; });
           var all = [];
-          for (var ki = 0; ki < keys.length; ki++)
-            for (var oi = 0; oi < order.length; oi++){
-              var mi = order[oi];
-              if (!deadKeyIdx[ki] && !pairSkipped429(ki, mi, passNo || 1)) all.push([ki, mi]);
-            }
+          if (keyCycle){
+            /* KEY-CYCLE ORDER (prompts-phase units — the permanent
+               shift rule, 2026-10-22 late night): the walk cycles the
+               KEYS on the current model first, and only moves to the
+               next model once every live key has had its turn with
+               this one. A failure on one key is therefore always
+               followed by the NEXT KEY on the lead model — never by
+               the same key's next model — and model rotation happens
+               across the whole key cycle. The brief chain (keyCycle
+               off) keeps its established key-major order. */
+            for (var oi2 = 0; oi2 < order.length; oi2++)
+              for (var kj = 0; kj < keys.length; kj++){
+                var mj = order[oi2];
+                if (!deadKeyIdx[kj] && !pairSkipped429(kj, mj, passNo || 1)) all.push([kj, mj]);
+              }
+          } else {
+            for (var ki = 0; ki < keys.length; ki++)
+              for (var oi = 0; oi < order.length; oi++){
+                var mi = order[oi];
+                if (!deadKeyIdx[ki] && !pairSkipped429(ki, mi, passNo || 1)) all.push([ki, mi]);
+              }
+          }
           if (startPair && all.length > 1){
             var sk = Math.max(0, Math.min(startPair.ki || 0, keys.length - 1));
             var sm = Math.max(0, Math.min(startPair.mi || 0, GEMINI_MODELS.length - 1));
@@ -6512,6 +6564,23 @@
           var fresh = [], demoted = [];
           all.forEach(function(p){ (demotedPairs[pairId(p[0], p[1])] ? demoted : fresh).push(p); });
           var ordered = fresh.concat(demoted);
+          /* START-KEY ANCHOR: the demotion above can push the
+             designated start pair itself back (the brief sweep may
+             already have seen it fail with a 503) — and in key-cycle
+             order the head would then fall to the NEXT KEY, breaking
+             the distributed-starts rule that a unit opens on its own
+             start key. So among the FRESH pairs, the first pair on
+             the start key takes the head: the unit still opens on
+             its designated key, on that key's first untried model.
+             Only the head moves; every other pair keeps its place,
+             and if no fresh pair remains on the start key the order
+             stands exactly as built. */
+          if (startPair && fresh.length > 1 && ordered[0][0] !== Math.max(0, Math.min(startPair.ki || 0, keys.length - 1))){
+            var skA = Math.max(0, Math.min(startPair.ki || 0, keys.length - 1));
+            for (var aj = 1; aj < fresh.length; aj++){
+              if (ordered[aj][0] === skA){ var ap = ordered.splice(aj, 1)[0]; ordered.unshift(ap); break; }
+            }
+          }
           /* Probe demotion (stable): pairs on a model that failed this
              run's opening probe go behind every pair on a model that
              answered (or was never probed) — the probe's winner leads,
@@ -6663,7 +6732,7 @@
               seen[pairId(ki, GEMINI_LITE_MI)] = true;
             }
           }
-          var rest = chainPairs(startPair, callOpts.modelOrder, passNo || 2).filter(function(p){ return (liteBad || p[1] !== GEMINI_LITE_MI) && !seen[pairId(p[0], p[1])]; });
+          var rest = chainPairs(startPair, callOpts.modelOrder, passNo || 2, callOpts.keyCycle).filter(function(p){ return (liteBad || p[1] !== GEMINI_LITE_MI) && !seen[pairId(p[0], p[1])]; });
           return first.concat(rest);
         }
         function runChain(promptText, opts, onOk){
@@ -6673,7 +6742,7 @@
           var maxPasses = opts.maxPasses || 1;
           function buildPairs(passNo){
             if (opts.rescueLiteFirst && passNo >= 2) return rescuePairs(opts, passNo);
-            return chainPairs(opts.startPair, opts.modelOrder, passNo);
+            return chainPairs(opts.startPair, opts.modelOrder, passNo, opts.keyCycle);
           }
           /* QUOTA-WINDOW STATE for this call: -1 when no live pair is
              quota-skipped at all (an empty chain then means every key
@@ -6696,6 +6765,22 @@
              the breaker object dies with the unit's processing. */
           function keySidelined(ki){
             return !!(opts.unitBreaker && opts.unitBreaker[ki] && opts.unitBreaker[ki].sidelined);
+          }
+          /* PAIR COOLING (permanent rule, 2026-10-22 late night —
+             cooling is per (key, model) PAIR, never per key): a pair
+             is cooling while its 429 window is still running
+             (pairSkipped429), or — prompts-phase units only — when it
+             timed out earlier in THIS unit: processUnit hands each
+             processing a fresh opts.unitCool, so a timeout-cooled pair
+             is skipped for the rest of that unit only and returns at
+             its natural place from the next unit on. The walk simply
+             skips cooling pairs; every other pair — including the
+             same key's other models, whose quotas are separate —
+             stays fully eligible. A timeout therefore never fails an
+             opportunity: it only cools one pair and shifts the walk. */
+          function pairCooling(ki, mi){
+            if (pairSkipped429(ki, mi, pass)) return true;
+            return !!(opts.unitCool && opts.unitCool[pairId(ki, mi)]);
           }
           function quotaWaitMs(){
             var now = Date.now(), min = Infinity, any = false;
@@ -6794,7 +6879,7 @@
               return Promise.reject(qe);
             }
             if (pass < maxPasses){
-              var nextPairs = chainPairs(opts.startPair, opts.modelOrder, pass + 1);
+              var nextPairs = chainPairs(opts.startPair, opts.modelOrder, pass + 1, opts.keyCycle);
               var qw = quotaWaitMs();
               /* Another pass is worthwhile when a fresh pair exists —
                  or when the chain is empty ONLY because of quota
@@ -6844,7 +6929,7 @@
                  call is walking the chain (an earlier attempt in this
                  same walk may have marked it): never start an attempt
                  on a pair this run has already proved unusable. */
-              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || pairSkipped429(pairs[pi][0], pairs[pi][1], pass) || keySidelined(pairs[pi][0]))) pi += 1;
+              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || pairCooling(pairs[pi][0], pairs[pi][1]) || keySidelined(pairs[pi][0]))) pi += 1;
               if (pi >= pairs.length) return Promise.reject(lastErr || prevErr || new Error("gemini-empty"));
               var remaining = deadline - Date.now();
               if (remaining <= 0) return Promise.reject(budgetErr());
@@ -6861,7 +6946,7 @@
               var chosen = -1, anyBusy = false, hintKi = -1, hintMsMin = Infinity;
               for (var scan = pi; scan < pairs.length; scan++){
                 var sk2 = pairs[scan][0];
-                if (deadKeyIdx[sk2] || pairSkipped429(sk2, pairs[scan][1], pass)) continue;
+                if (deadKeyIdx[sk2] || pairCooling(sk2, pairs[scan][1])) continue;
                 if (keySidelined(sk2)) continue;
                 if (keyBusy[sk2]){ anyBusy = true; continue; }
                 var hMs = keyHintWaitMs(sk2);
@@ -6876,8 +6961,17 @@
               pi = chosen;
               var ki = pairs[pi][0], mi = pairs[pi][1];
               if (last429Ki >= 0 && ki !== last429Ki){
-                logLine("Key " + (last429Ki + 1) + " hit its limit — Key " + (ki + 1) + " is taking over", "warn");
+                logLine("Key " + (last429Ki + 1) + " hit its limit — shifting to Key " + (ki + 1), "warn");
                 last429Ki = -1;
+              }
+              /* AUTOMATIC RETURN: a pair that cooled earlier in this
+                 run and is being attempted again is back at its
+                 natural place on its own — its 429 window passed, or
+                 a later unit has begun. Say so once, in plain words,
+                 and clear the note (see pairCoolNote). */
+              if (pairCoolNote[pairId(ki, mi)] && !pairCooling(ki, mi)){
+                logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " is back", "ok");
+                delete pairCoolNote[pairId(ki, mi)];
               }
               /* Per-key pacing: at least 3s between attempt starts on
                  the same key; a key's first attempt is never delayed.
@@ -6939,20 +7033,58 @@
                      out when no free key remains (see tryPair). */
                   var hintS = parseRetryHint(err);
                   skipPairs429[pairId(ki, mi)] = Date.now() + (hintS > 0 ? Math.ceil(hintS + 1) * 1000 : 60000);
+                  /* The pair is cooling now; when its window passes
+                     and it is attempted again, the walk logs its
+                     return ("is back" — see pairCoolNote). */
+                  pairCoolNote[pairId(ki, mi)] = true;
                   if (hintS > 0){
                     var until = Date.now() + Math.ceil(hintS + 1) * 1000;
                     if (!keyReadyAt[ki] || keyReadyAt[ki] < until) keyReadyAt[ki] = until;
                   }
                 } else if (err && (err.status === 503 || err.timedOut)){
-                  /* Temporary failure: the pair stays usable, but later
-                     chains in this run try untried pairs first. */
-                  demotedPairs[pairId(ki, mi)] = true;
+                  if (err.timedOut && opts.unitCool){
+                    /* PERMANENT RULE — a timeout cools ONLY this
+                       (key, model) pair, and only for the rest of
+                       this unit: the walk shifts to the next
+                       non-cooling pair, the opportunity is NEVER
+                       marked failed for a timeout, and the pair
+                       returns at its natural place from the next
+                       unit on (its return is logged — see
+                       pairCoolNote). No demotion either: demoting
+                       would move its natural place in later units. */
+                    opts.unitCool[pairId(ki, mi)] = true;
+                    pairCoolNote[pairId(ki, mi)] = true;
+                  } else {
+                    /* Temporary failure: the pair stays usable, but later
+                       chains in this run try untried pairs first. */
+                    demotedPairs[pairId(ki, mi)] = true;
+                  }
                 }
                 var det = errDetail(err);
-                var nx = pairs[pi + 1];
-                if (nx){
+                /* SHIFT LOGGING (permanent rule): name the pair the
+                   walk actually moves to — the next pair in the order
+                   that is not dead, not cooling and not sidelined —
+                   in plain words. A limit and a timeout each get
+                   their own sentence naming the key that takes over;
+                   when the shift was already announced here, the
+                   takeover line in tryPair stays silent (last429Ki
+                   is cleared) so a shift is never logged twice. */
+                var nx = null;
+                for (var nj = pi + 1; nj < pairs.length; nj++){
+                  var nk = pairs[nj][0];
+                  if (deadKeyIdx[nk] || pairCooling(nk, pairs[nj][1]) || keySidelined(nk)) continue;
+                  nx = pairs[nj]; break;
+                }
+                if (nx && err && err.status === 429 && nx[0] !== ki){
+                  logLine("Key " + (ki + 1) + " hit its limit — shifting to Key " + (nx[0] + 1), "warn");
+                  if (last429Ki === ki) last429Ki = -1;
+                } else if (nx && err && err.timedOut && nx[0] !== ki){
+                  logLine("Key " + (ki + 1) + " did not answer in time — shifting to Key " + (nx[0] + 1), "warn");
+                } else if (nx){
                   if (nx[0] === ki)
                     logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " could not answer" + (det ? " (" + det + ")" : "") + " — switching to " + GEMINI_MODELS[nx[1]], "warn");
+                  else if (opts.keyCycle)
+                    logLine("Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + " could not answer" + (det ? " (" + det + ")" : "") + " — shifting to Key " + (nx[0] + 1), "warn");
                   else
                     logLine("Key " + (ki + 1) + " did not answer on any model" + (det ? " (" + det + ")" : "") + " — switching to Key " + (nx[0] + 1) + " automatically", "warn");
                 }
@@ -7067,6 +7199,7 @@
               } else if (err && err.status === 429){
                 markKeyQuota(keys[ki]);
                 skipPairs429[pairId(ki, mi)] = Date.now() + 60000;
+                pairCoolNote[pairId(ki, mi)] = true;
               } else if (err && (err.status === 503 || err.timedOut)){
                 demotedPairs[pairId(ki, mi)] = true;
               }
@@ -7251,6 +7384,7 @@
               } else if (err && err.status === 429){
                 markKeyQuota(keys[ki]);
                 prev429Ki = ki;
+                pairCoolNote[pairId(ki, smi)] = true;
                 var sHint = parseRetryHint(err);
                 skipPairs429[pairId(ki, smi)] = Date.now() + (sHint > 0 ? Math.ceil(sHint + 1) * 1000 : 60000);
                 if (sHint > 0){
@@ -7514,11 +7648,17 @@
                unit (see keySidelined in runChain): sidelined keys are
                sidelined only here, never for later units. */
             var unitBreaker = {};
+            /* Fresh PAIR-COOLING state for THIS processing of the
+               unit (see pairCooling in runChain): a pair that times
+               out here is cooled for the rest of this unit only —
+               the fresh object per processing is what returns it to
+               the rotation, at its natural place, in the next unit. */
+            var unitCool = {};
             function attempt(promptText, startKi){
               var left = budgetLeft();
               if (left <= 0){ var be = new Error("gemini-budget"); be.budgetExhausted = true; return Promise.reject(be); }
               var got = null;
-              return runChain(promptText, { attemptTimeoutMs: unitOpps.length > 1 ? GEMINI_BATCH_TIMEOUT_MS : GEMINI_SINGLE_TIMEOUT_MS, budgetMs: left, maxPasses: 4, creditRun: false, rescueLiteFirst: true, splitOnQuota: unitOpps.length > 1, splitNow: unitOpps.length > 1, unitBreaker: unitBreaker, waitNoun: "this prompt batch", onAttempt: function(ki, mi, p){
+              return runChain(promptText, { attemptTimeoutMs: unitOpps.length > 1 ? GEMINI_BATCH_TIMEOUT_MS : GEMINI_SINGLE_TIMEOUT_MS, budgetMs: left, maxPasses: 4, creditRun: false, rescueLiteFirst: true, splitOnQuota: unitOpps.length > 1, splitNow: unitOpps.length > 1, unitBreaker: unitBreaker, unitCool: unitCool, keyCycle: true, waitNoun: "this prompt batch", onAttempt: function(ki, mi, p){
                 phaseBase = "Writing prompts — " + unitLabel + " · " + promptsDone + " of " + promptsTotal + " ready · working through your keys · Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + (p > 1 ? " · pass " + p : "");
               }, onPassFail: (isCanary && unitOpps.length > 1) ? function(stats){ return stats.timeouts > 0 && stats.e429 === 0; } : null, startPair: { ki: (startKi != null ? startKi : (unit.startKi != null ? unit.startKi : (runOffset + bIdx) % Math.max(1, keys.length))), mi: (promptsLeadMi != null ? promptsLeadMi : lastWin.mi) }, shouldStop: function(){ return phaseHalt; } }, function(json){
                 got = json; return json;
