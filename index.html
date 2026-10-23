@@ -3835,12 +3835,12 @@
         { f: "assets/ev/bbq2-01.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-01.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/eggs2-01.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
-        { f: "assets/ev/steak2-01.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
-        { f: "assets/ev/steak2-02.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-04.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-05.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/bread2-02.jpg", t: "artisan bread bakery", c: "Food & Drink" },
         { f: "assets/ev/bbq2-02.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/cheesecake2-01.jpg", t: "cheesecake cafe", c: "Food & Drink" },
-        { f: "assets/ev/steak2-03.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
+        { f: "assets/ev/steak2-06.jpg", t: "steak dinner fine dining", c: "Food & Drink" },
         { f: "assets/ev/eggs2-02.jpg", t: "breakfast eggs morning", c: "Food & Drink" },
         { f: "assets/ev/bbq2-03.jpg", t: "barbecue grill backyard", c: "Food & Drink" },
         { f: "assets/ev/bread2-03.jpg", t: "artisan bread bakery", c: "Food & Drink" },
@@ -5613,7 +5613,9 @@
       /* TIME BUDGETS ARE PER BATCH (user order, 2026-10-22 evening —
          "hr batch ko complete time mily"): every prompt batch (and every
          split part) carries its OWN full allowance — the whole pool
-         walked with full 90s attempt caps and the full pass budget in
+         walked with full attempt caps (180s at batch size, 90s for
+         single opportunities — see GEMINI_BATCH_TIMEOUT_MS) and the
+         full pass budget in
          GEMINI_BATCH_BUDGET_MS — no matter how long the batches before
          it took, so a slow first batch can never starve the last one.
          PATIENT MODE stands: a slow run that COMPLETES beats a fast run
@@ -5636,11 +5638,19 @@
          walks the chain again (up to 4 passes, see runChain) — the brief
          only fails when this whole ceiling is genuinely exhausted. */
       var GEMINI_BRIEF_BUDGET_MS = 600000;
-      /* Prompt batches are written CONCURRENTLY — a pool of 3 workers,
-         each writing one batch of 3 opportunities. Their per-attempt cap
-         is the same patient 90s as the brief: a slow answer that lands
-         is worth far more than a fast failure. */
-      var GEMINI_BATCH_TIMEOUT_MS = 90000;
+      /* Per-attempt caps in the prompts phase (Amendment, 2026-10-22
+         night — the live resume evidence): a batch-size call asks for
+         3 opportunities x 9 prompts plus the long rules block — the
+         longest generations this tool makes — and on the user's live
+         keys those generations legitimately land at 100-170s. The old
+         fixed 90s cap cut them off mid-generation and logged the key
+         as "no answer" even though the SAME keys answer fine in the
+         user's other tool, which sends lighter calls and waits.
+         Batch-size attempts therefore get 180s; single-opportunity
+         calls (about a third of the generation) keep 90s; the brief
+         keeps its own 90s (GEMINI_TIMEOUT_MS above). */
+      var GEMINI_BATCH_TIMEOUT_MS = 180000;
+      var GEMINI_SINGLE_TIMEOUT_MS = 90000;
       /* Ceiling for ONE prompt batch, across every key, model and retry
          pass it tries (and never past the run's safety ceiling): 10
          minutes, with 15s waits between chain passes. A batch fails the
@@ -6383,6 +6393,33 @@
            TRIED this run outranks one that already failed — the pool
            shares the work instead of one key absorbing it. */
         var keyTried = {}, keyAnswered = {};
+        /* keyCredit counts the real work each key has WON this run
+           (the brief and the prompt batches; probes do not count).
+           chainPairs orders the already-credited tier least-credited
+           first — the run's most-used key goes last — and the
+           quality-gate re-ask moves off the answerer when that
+           answerer is already the run's most-used key (see
+           processUnit), so credited work keeps spreading over the
+           pool instead of piling onto the first keys that answered. */
+        var keyCredit = {};
+        function isRunMostUsed(ki){
+          var c = keyCredit[ki] || 0;
+          if (c <= 0) return false;
+          for (var i = 0; i < keys.length; i++){
+            if (!deadKeyIdx[i] && (keyCredit[i] || 0) > c) return false;
+          }
+          return true;
+        }
+        function leastUsedKeyIdx(exceptKi){
+          var best = -1;
+          for (var i = 0; i < keys.length; i++){
+            if (deadKeyIdx[i] || i === exceptKi) continue;
+            if (best < 0){ best = i; continue; }
+            var tI = keyTried[i] ? 1 : 0, tB = keyTried[best] ? 1 : 0;
+            if (tI < tB || (tI === tB && (keyCredit[i] || 0) < (keyCredit[best] || 0))) best = i;
+          }
+          return best;
+        }
         /* This run's rotating batch-start offset (persisted across
            runs — see nextRunOffset) and the probe's findings: whether
            the lead model's probe answer was slow (probeSlowDay —
@@ -6438,8 +6475,10 @@
            order so each call opens on its given start pair, with the rest
            of the chain following in its normal order. The brief opens on
            the probe's winning pair. Every prompt batch opens on its
-           rotating key — (run offset + batch number) across the pool, the
-           offset advancing each run — paired with the run's prompts-lead
+           distributed start key — spread across the whole pool by
+           unit number, plus the run's rotating offset (see
+           DISTRIBUTED BATCH STARTS in beginPromptsPhase) — paired
+           with the run's prompts-lead
            model, and the spread-first ordering inside chainPairs then
            puts keys that have not answered yet ahead of the key that
            already won work, so batches never queue on a single key's
@@ -6492,7 +6531,9 @@
              then every pair on a key that has NOT answered yet in this
              run, then pairs on keys that were tried but have not
              answered, and only then the remaining pairs on a key that
-             already won work. Inside each tier the order built above
+             already won work — those credited pairs ordered
+             least-credited first, so the run's most-used key goes
+             last in its tier. Inside each tier the order built above
              (rotation, demotions, probe demotion) is preserved, so a
              key that has never been tried this run outranks one that
              already failed, which outranks the run's winning key. */
@@ -6504,6 +6545,12 @@
               else if (keyTried[p[0]]) sTried.push(p);
               else sNew.push(p);
             });
+            /* Deepened untried-first: within the credited tier the
+               least-credited keys come first and the run's most-used
+               key goes last (stable sort — a key's own pairs keep
+               their chain order), so a key that already carried the
+               run stops absorbing every later call. */
+            sWon.sort(function(a, b){ return (keyCredit[a[0]] || 0) - (keyCredit[b[0]] || 0); });
             ordered = [sHead].concat(sNew, sTried, sWon);
           }
           return ordered;
@@ -6638,6 +6685,18 @@
              pass-retry below) instead of dying on the spot — a split
              part or the next batch starting right after a 429 storm
              depends on this. */
+          /* PER-UNIT KEY CIRCUIT BREAKER (opts.unitBreaker, created
+             fresh by processUnit for every processing): after 2
+             CONSECUTIVE timeouts on the same key within this unit,
+             the key is sidelined FOR THIS UNIT ONLY — the walk moves
+             to the next key instead of burning every model x the full
+             attempt cap serially on a key that is not answering
+             (live evidence: one key ate ~6 minutes of a resume this
+             way). The key stays in rotation for every later unit —
+             the breaker object dies with the unit's processing. */
+          function keySidelined(ki){
+            return !!(opts.unitBreaker && opts.unitBreaker[ki] && opts.unitBreaker[ki].sidelined);
+          }
           function quotaWaitMs(){
             var now = Date.now(), min = Infinity, any = false;
             for (var ki = 0; ki < keys.length; ki++){
@@ -6707,6 +6766,19 @@
               sle.slowSplit = true;
               return Promise.reject(sle);
             }
+            /* SPLIT ON FIRST FAILURE (batch-size units only, via
+               opts.splitNow): a batch whose FIRST pass ends without
+               success never gets a second batch-size pass — the call
+               rejects here and processUnit continues the batch as
+               single-opportunity parts, whose far smaller generations
+               finish where the batch-size one could not. Like the
+               canary above, this verdict outranks the budget verdict:
+               a budget-cut first pass is still a failed first pass. */
+            if (opts.splitNow && pass <= 1){
+              var sne = new Error("gemini-split-now");
+              sne.splitNow = true;
+              return Promise.reject(sne);
+            }
             if (err && err.budgetExhausted) return Promise.reject(err);
             if (err && err.stopped) return Promise.reject(err);
             if (isHardErr(err)) return Promise.reject(err);
@@ -6772,7 +6844,7 @@
                  call is walking the chain (an earlier attempt in this
                  same walk may have marked it): never start an attempt
                  on a pair this run has already proved unusable. */
-              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || pairSkipped429(pairs[pi][0], pairs[pi][1], pass))) pi += 1;
+              while (pi < pairs.length && (deadKeyIdx[pairs[pi][0]] || pairSkipped429(pairs[pi][0], pairs[pi][1], pass) || keySidelined(pairs[pi][0]))) pi += 1;
               if (pi >= pairs.length) return Promise.reject(lastErr || prevErr || new Error("gemini-empty"));
               var remaining = deadline - Date.now();
               if (remaining <= 0) return Promise.reject(budgetErr());
@@ -6790,6 +6862,7 @@
               for (var scan = pi; scan < pairs.length; scan++){
                 var sk2 = pairs[scan][0];
                 if (deadKeyIdx[sk2] || pairSkipped429(sk2, pairs[scan][1], pass)) continue;
+                if (keySidelined(sk2)) continue;
                 if (keyBusy[sk2]){ anyBusy = true; continue; }
                 var hMs = keyHintWaitMs(sk2);
                 if (hMs > 0){ if (hMs < hintMsMin){ hintMsMin = hMs; hintKi = sk2; } continue; }
@@ -6818,6 +6891,7 @@
               return callGemini(keys[ki], GEMINI_MODELS[mi], promptText, Math.min(attemptCap, remaining)).then(function(res){
                 keyBusy[ki] = false;
                 keyAnswered[ki] = true;
+                keyCredit[ki] = (keyCredit[ki] || 0) + 1;
                 var value = onOk(res.json);
                 if (opts.creditRun) recordKeyUsage(keys[ki], res.tokens); else recordKeyTokens(keys[ki], res.tokens);
                 return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[mi], ki: ki, mi: mi };
@@ -6828,6 +6902,23 @@
                 if (err && err.status === 429) passStats.e429 += 1;
                 if (err && err.timedOut) passStats.timeouts += 1;
                 lastErr = err;
+                /* Circuit breaker bookkeeping: a timeout grows this
+                   key's streak for THIS unit; any other outcome on
+                   the key resets it. At 2 consecutive timeouts the
+                   key is sidelined for the rest of the unit (see
+                   keySidelined) — later units get a fresh breaker. */
+                if (opts.unitBreaker){
+                  var ub = opts.unitBreaker[ki] || (opts.unitBreaker[ki] = { streak: 0, sidelined: false });
+                  if (err && err.timedOut){
+                    ub.streak += 1;
+                    if (ub.streak >= 2 && !ub.sidelined){
+                      ub.sidelined = true;
+                      logLine("Key " + (ki + 1) + " timed out twice in a row on this batch — sidelining it for this batch only and moving to the next key (it stays in rotation for the other batches)", "warn");
+                    }
+                  } else {
+                    ub.streak = 0;
+                  }
+                }
                 if (isDeniedAccessErr(err)){
                   /* Denied access is permanent for that Google project:
                      flag the key dead (persisted across runs — see
@@ -6874,36 +6965,50 @@
         }
         /* MODEL PROBE / AUTO-SELECT (user order, 2026-10-22 — "select
            the model that can actually work"; WHOLE-POOL + LATENCY
-           revision, 2026-10-22 evening): fixed assumptions about which
-           model leads are not enough — a paid key hit the same wall as
+           revision, 2026-10-22 evening; FULL-COVERAGE revision,
+           2026-10-22 night): fixed assumptions about which model
+           leads are not enough — a paid key hit the same wall as
            the free ones, so the working (key, model) pair is chosen
-           EMPIRICALLY at the start of every live run. The probe sweeps
-           the WHOLE pool, not just the first keys: one minimal call
-           ("OK", 8 output tokens) per key on the lead candidate model,
-           across every non-dead key; only when no key answers on that
-           model does the probe move to the next model, on the keys
-           that have not answered. The FIRST pair that answers becomes
-           the run's lead — wherever it sits in the pool — and seeds
-           lastWin, the key sweep and the brief chain's start pair. A
-           model that was probed and never answered anywhere is demoted
-           for this run (see probeFailedModels / chainPairs). The
-           probe can never block or fail a run: its whole budget is 90
-           seconds, per-call cap 30s, one call at a time with the
-           normal 3s per-key pacing, and if nothing answers the run
-           proceeds on the default chain order exactly as before.
-           LATENCY is recorded for every probe answer: a lead answer
-           slower than 20s marks a slow-Google day (probeSlowDay — the
-           adaptive-split signal), and the probe then checks the
-           remaining models on the lead key; a model that answers in
-           under 10s there leads the PROMPTS phase (promptsLeadMi), so
-           the run writes its prompts on the model that is actually
-           fast today, not merely the first that answered. Probe
-           tokens credit to the probing key; probe attempts count in
-           the per-key attempt tally (recordKeyAttempt), and probe
-           failures feed the same per-run memory as any call (a denied
-           key is flagged dead, a 429 burns only that pair). */
+           EMPIRICALLY at the start of every live run. The probe
+           attempts EVERY non-dead key — the panel showed Keys 6–10
+           still at "Not used yet" after a full run because the old
+           sweep stopped at the first answer — in parallel waves of
+           up to 3 probes in flight (one per key; probes only, this
+           does not change the one-call-in-flight rule for real
+           work), each capped at ~12s, on the lead candidate model;
+           only when NO key answers on that model does the probe
+           move to the next model, again across the whole pool. The
+           FASTEST answer on the first answering model becomes the
+           run's lead — wherever it sits in the pool — and seeds
+           lastWin, the key sweep and the brief chain's start pair.
+           A model that was probed and never answered anywhere is
+           demoted for this run (see probeFailedModels / chainPairs).
+           The probe can never block or fail a run: its whole budget
+           is 90 seconds, and if nothing answers the run proceeds on
+           the default chain order exactly as before. The budget can
+           also never SILENTLY skip a key: any live key it did not
+           reach is finished as the prompts phase opens, before
+           batch 1 (see completeProbeCoverage), so by the time the
+           first batch is written every non-dead key has had at
+           least one attempt. LATENCY is recorded for every probe
+           answer: a lead answer slower than 8s marks a slow-Google
+           day (probeSlowDay — the adaptive-split signal), and the
+           probe then checks the remaining models on the lead key;
+           a model that answers in under 4s there leads the PROMPTS
+           phase (promptsLeadMi), so the run writes its prompts on
+           the model that is actually fast today, not merely the
+           first that answered. Probe tokens credit to the probing
+           key; probe attempts count in the per-key attempt tally
+           (recordKeyAttempt), and probe failures feed the same
+           per-run memory as any call (a denied key is flagged dead,
+           a 429 burns only that pair). Probe state lives at run
+           scope so the completion pass shares it with the opening
+           probe. */
         var PROBE_ORDER = GEMINI_BRIEF_ORDER.slice();
-        var PROBE_TIMEOUT_MS = 30000, PROBE_BUDGET_MS = 90000;
+        var PROBE_TIMEOUT_MS = 12000, PROBE_BUDGET_MS = 90000, PROBE_WAVE = 3;
+        var probeT0 = 0;
+        var probeCovered = {}, probeAttemptedModels = {}, probeAnsweredModels = {};
+        function probeBudgetLeftMs(){ return PROBE_BUDGET_MS - (Date.now() - probeT0); }
         function probeFetch(key, model, timeoutMs){
           var ctrl = ("AbortController" in window) ? new AbortController() : null;
           var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, timeoutMs);
@@ -6934,8 +7039,44 @@
             throw err;
           });
         }
+        function probeOne(ki, mi, ignoreBudget){
+          var model = GEMINI_MODELS[mi];
+          phaseBase = "Model check — trying " + model + " on Key " + (ki + 1);
+          var paceMs = keyLastStart[ki] ? (3000 - (Date.now() - keyLastStart[ki])) : 0;
+          function start(){
+            if (!ignoreBudget && probeBudgetLeftMs() <= 0) return Promise.resolve(null);
+            keyLastStart[ki] = Date.now();
+            keyTried[ki] = true;
+            recordKeyAttempt(keys[ki]);
+            probeCovered[ki] = true;
+            probeAttemptedModels[mi] = true;
+            var pStart = Date.now();
+            var cap = ignoreBudget ? PROBE_TIMEOUT_MS : Math.min(PROBE_TIMEOUT_MS, Math.max(1000, probeBudgetLeftMs()));
+            return probeFetch(keys[ki], model, cap).then(function(r){
+              var ms = Date.now() - pStart;
+              probeAnsweredModels[mi] = true;
+              keyAnswered[ki] = true;
+              recordKeyTokens(keys[ki], r.tokens);
+              return { ki: ki, mi: mi, ms: ms };
+            }).catch(function(err){
+              if (isDeniedAccessErr(err)){
+                /* The KEY is dead, not just this model: flag it and
+                   never probe on it again — the pool moves on. */
+                deadKeyIdx[ki] = true;
+                if (markKeyDead(keys[ki])) logLine("Key " + (ki + 1) + " has been denied access by Google — it will be skipped from now on.", "warn");
+              } else if (err && err.status === 429){
+                markKeyQuota(keys[ki]);
+                skipPairs429[pairId(ki, mi)] = Date.now() + 60000;
+              } else if (err && (err.status === 503 || err.timedOut)){
+                demotedPairs[pairId(ki, mi)] = true;
+              }
+              return null;
+            });
+          }
+          return paceMs > 0 ? sleepMs(paceMs).then(start) : start();
+        }
         function probeLeadModel(){
-          var t0 = Date.now();
+          probeT0 = Date.now();
           /* WHOLE POOL: every non-dead key is a probe candidate — a
              run must be able to find a live key sitting anywhere in
              the list (the evening this was ordered, the first keys
@@ -6951,88 +7092,60 @@
             var ro = runOffset % poolKeys.length;
             if (ro) poolKeys = poolKeys.slice(ro).concat(poolKeys.slice(0, ro));
           }
-          var attempted = {}, answered = {}, bestLatency = {}, lead = null;
-          function budgetLeftMs(){ return PROBE_BUDGET_MS - (Date.now() - t0); }
-          function probeOne(ki, mi){
-            var model = GEMINI_MODELS[mi];
-            phaseBase = "Model check — trying " + model + " on Key " + (ki + 1);
-            var paceMs = keyLastStart[ki] ? (3000 - (Date.now() - keyLastStart[ki])) : 0;
-            function start(){
-              if (budgetLeftMs() <= 0) return Promise.resolve(null);
-              keyLastStart[ki] = Date.now();
-              keyTried[ki] = true;
-              recordKeyAttempt(keys[ki]);
-              attempted[mi] = true;
-              var pStart = Date.now();
-              var cap = Math.min(PROBE_TIMEOUT_MS, Math.max(1000, budgetLeftMs()));
-              return probeFetch(keys[ki], model, cap).then(function(r){
-                var ms = Date.now() - pStart;
-                answered[mi] = true;
-                keyAnswered[ki] = true;
-                if (bestLatency[mi] === undefined || ms < bestLatency[mi]) bestLatency[mi] = ms;
-                recordKeyTokens(keys[ki], r.tokens);
-                return { ki: ki, mi: mi, ms: ms };
-              }).catch(function(err){
-                if (isDeniedAccessErr(err)){
-                  /* The KEY is dead, not just this model: flag it and
-                     never probe on it again — the pool moves on. */
-                  deadKeyIdx[ki] = true;
-                  if (markKeyDead(keys[ki])) logLine("Key " + (ki + 1) + " has been denied access by Google — it will be skipped from now on.", "warn");
-                } else if (err && err.status === 429){
-                  markKeyQuota(keys[ki]);
-                  skipPairs429[pairId(ki, mi)] = Date.now() + 60000;
-                } else if (err && (err.status === 503 || err.timedOut)){
-                  demotedPairs[pairId(ki, mi)] = true;
-                }
-                return null;
+          var lead = null;
+          /* Model-major sweep in parallel waves: the lead candidate
+             model is probed on EVERY live key (waves of up to
+             PROBE_WAVE keys in flight); the next model is swept,
+             again across the whole pool, only when no key answered
+             on this one. The fastest answer on the first answering
+             model leads the run. */
+          function sweepModel(mix){
+            if (lead || mix >= PROBE_ORDER.length || probeBudgetLeftMs() <= 0) return Promise.resolve();
+            var mi = PROBE_ORDER[mix];
+            var hits = [], idx = 0;
+            function wave(){
+              if (idx >= poolKeys.length || probeBudgetLeftMs() <= 0) return Promise.resolve();
+              var slice = [];
+              while (slice.length < PROBE_WAVE && idx < poolKeys.length){
+                var ki = poolKeys[idx]; idx += 1;
+                if (!deadKeyIdx[ki]) slice.push(ki);
+              }
+              if (!slice.length) return wave();
+              return Promise.all(slice.map(function(k2){ return probeOne(k2, mi); })).then(function(rs){
+                rs.forEach(function(h){ if (h) hits.push(h); });
+                return wave();
               });
             }
-            return paceMs > 0 ? sleepMs(paceMs).then(start) : start();
-          }
-          /* Model-major sweep: the lead candidate model is tried on
-             every live key first; the next model is probed (on keys
-             still in the pool) only when no key answered on this one.
-             The first answer anywhere ends the sweep — that pair leads. */
-          function sweepModel(mix){
-            if (lead || mix >= PROBE_ORDER.length || budgetLeftMs() <= 0) return Promise.resolve();
-            var mi = PROBE_ORDER[mix];
-            var chainP = Promise.resolve();
-            poolKeys.forEach(function(ki){
-              chainP = chainP.then(function(){
-                if (lead || deadKeyIdx[ki] || budgetLeftMs() <= 0) return null;
-                return probeOne(ki, mi).then(function(hit){
-                  if (hit && !lead){
-                    lead = hit;
-                    var secs = Math.max(1, Math.round(hit.ms / 1000));
-                    logLine("Model check — " + GEMINI_MODELS[mi] + " answered on Key " + (ki + 1) + " in " + secs + "s · it will lead this run", "ok");
-                  }
-                });
-              });
-            });
-            return chainP.then(function(){
-              if (!lead && mix + 1 < PROBE_ORDER.length && budgetLeftMs() > 0)
+            return wave().then(function(){
+              if (hits.length){
+                hits.sort(function(a, b){ return a.ms - b.ms; });
+                lead = hits[0];
+                logLine("Model check — " + GEMINI_MODELS[mi] + " answered on Key " + (lead.ki + 1) + " in " + Math.max(1, Math.round(lead.ms / 1000)) + "s · it will lead this run", "ok");
+                return Promise.resolve();
+              }
+              if (mix + 1 < PROBE_ORDER.length && probeBudgetLeftMs() > 0)
                 logLine("Model check — " + GEMINI_MODELS[mi] + " did not answer on any key · trying " + GEMINI_MODELS[PROBE_ORDER[mix + 1]], "warn");
               return sweepModel(mix + 1);
             });
           }
-          /* SLOW-LEAD CHECK: the lead answered, but slowly (>20s) —
+          /* SLOW-LEAD CHECK: the lead answered, but slowly (>8s) —
              Google is having a slow day. Before the run commits to
              that model for the prompts phase, the remaining models
              get one minimal probe each on the lead key (inside the
-             same 90s budget): a model answering in under 10s there is
+             same 90s budget): a model answering in under 4s there is
              plainly the faster writer today, so it leads the prompts
              phase (the brief still opens on the probe's lead pair). */
           function slowLeadCheck(){
-            if (!lead || lead.ms <= 20000) return Promise.resolve();
+            if (!lead || lead.ms <= 8000) return Promise.resolve();
             probeSlowDay = true;
             logLine("Model check — " + GEMINI_MODELS[lead.mi] + " answered slowly (" + Math.round(lead.ms / 1000) + "s) · checking whether another model is faster today", "warn");
             var chainP = Promise.resolve(), fastest = null;
             PROBE_ORDER.forEach(function(mi){
               if (mi === lead.mi) return;
               chainP = chainP.then(function(){
-                if (deadKeyIdx[lead.ki] || budgetLeftMs() <= 0) return null;
+                if (deadKeyIdx[lead.ki] || probeBudgetLeftMs() <= 0) return null;
                 return probeOne(lead.ki, mi).then(function(hit){
-                  if (hit && hit.ms < 10000 && (!fastest || hit.ms < fastest.ms)) fastest = hit;
+                  if (hit && hit.ms < 4000 && (!fastest || hit.ms < fastest.ms)) fastest = hit;
                 });
               });
             });
@@ -7044,10 +7157,45 @@
             });
           }
           return sweepModel(0).then(slowLeadCheck).then(function(){
-            Object.keys(attempted).forEach(function(mi){ if (!answered[mi]) probeFailedModels[mi] = true; });
+            Object.keys(probeAttemptedModels).forEach(function(mi){ if (!probeAnsweredModels[mi]) probeFailedModels[mi] = true; });
             if (lead) lastWin = { ki: lead.ki, mi: lead.mi };
             return lead;
           }).catch(function(){ return lead; });
+        }
+        /* PROBE COVERAGE COMPLETION: if the opening probe's 90s
+           budget ran out before every live key had been probed (a
+           big pool on a slow day), the unprobed keys are finished
+           HERE — as the prompts phase opens, before batch 1's first
+           chain walk (during batch 1's window, never dropped) — in
+           the same parallel waves of up to 3 with the same ~12s
+           caps, and no longer bounded by the spent probe budget:
+           coverage is owed, not optional. Late probe results feed
+           the same per-run memory as on-time ones — a denied key is
+           flagged dead, a 429 burns only that pair, and a model
+           that never answered anywhere joins the run's demotions. */
+        function completeProbeCoverage(){
+          var todo = [];
+          for (var i = 0; i < keys.length; i++) if (!deadKeyIdx[i] && !probeCovered[i]) todo.push(i);
+          if (!todo.length) return Promise.resolve();
+          logLine("Model check — the opening check did not reach " + todo.length + (todo.length === 1 ? " key" : " keys") + " in time · finishing the check on them now, before the first batch", "warn");
+          var mi = PROBE_ORDER[0];
+          var idx = 0, anyAnswer = false;
+          function wave(){
+            if (idx >= todo.length) return Promise.resolve();
+            var slice = [];
+            while (slice.length < PROBE_WAVE && idx < todo.length){
+              var ki = todo[idx]; idx += 1;
+              if (!deadKeyIdx[ki]) slice.push(ki);
+            }
+            if (!slice.length) return wave();
+            return Promise.all(slice.map(function(k2){ return probeOne(k2, mi, true); })).then(function(rs){
+              rs.forEach(function(h){ if (h) anyAnswer = true; });
+              return wave();
+            });
+          }
+          return wave().then(function(){
+            if (!anyAnswer && !probeAnsweredModels[mi]) probeFailedModels[mi] = true;
+          });
         }
         /* QUICK KEY SWEEP (brief only, before the chain): one attempt
            with the run's lead model, capped at 30s, on each of up to 3
@@ -7091,6 +7239,7 @@
             keyLastStart[ki] = Date.now();
             return callGemini(keys[ki], GEMINI_MODELS[smi], promptText, GEMINI_SWEEP_TIMEOUT_MS).then(function(res){
               keyAnswered[ki] = true;
+              keyCredit[ki] = (keyCredit[ki] || 0) + 1;
               var value = onOk(res.json);
               recordKeyUsage(keys[ki], res.tokens);
               return { value: value, keyNo: ki + 1, model: GEMINI_MODELS[smi], ki: ki, mi: smi };
@@ -7183,12 +7332,15 @@
            done; only then does the next batch start. This is the
            pattern the user's successful early runs had (~3 keys
            rotating per batch, results arriving), and completion is the
-           priority over parallelism. Each batch opens on its rotating
-           key — (run offset + batch number) over the pool, the offset
-           advancing every run (see nextRunOffset) — paired with the
-           run's prompts-lead model, so over a run and across runs the
-           work spreads over the saved keys' separate quotas instead of
-           queueing on Key 1. GEMINI-ONLY: every prompt in the run must
+           priority over parallelism. Each batch opens on its
+           distributed start key — spread across the whole pool by
+           unit number, plus the run's rotating offset, so the starts
+           reach the pool's tail instead of clustering on its first
+           keys (see DISTRIBUTED BATCH STARTS in beginPromptsPhase) —
+           paired with the run's prompts-lead model, so over a run
+           and across runs the work spreads over the saved keys'
+           separate quotas instead of queueing on Key 1. GEMINI-ONLY:
+           every prompt in the run must
            be written by Gemini — no batch is ever completed locally,
            because locally templated prompts could hand two users
            near-identical results for the same research. A batch whose
@@ -7296,7 +7448,7 @@
           function toSingles(us){
             var out = [];
             us.forEach(function(u){
-              if (u.opps.length > 1) u.opps.forEach(function(o, oi){ out.push({ opps: [o], bIdx: u.bIdx, part: true, partNo: oi + 1, partOf: u.opps.length }); });
+              if (u.opps.length > 1) u.opps.forEach(function(o, oi){ out.push({ opps: [o], bIdx: u.bIdx, part: true, partNo: oi + 1, partOf: u.opps.length, startKi: (u.startKi != null ? (u.startKi + oi) % Math.max(1, keys.length) : null) }); });
               else out.push(u);
             });
             return out;
@@ -7305,6 +7457,27 @@
             units = toSingles(units);
             logLine("Google is slow today — switching to one opportunity at a time, so every answer stays small enough to finish", "warn");
           }
+          /* DISTRIBUTED BATCH STARTS (user order, 2026-10-22 night —
+             "just key 5 tk use ho rhi han agy wali use hi nai ho rhi
+             han so mai ny ye bola tha all key use hon"): each unit's
+             designated start key spreads across the ENTIRE pool —
+             unit i opens at floor(i x pool / units), an even stride
+             over the whole pool, plus the run's rotating offset,
+             wrapping — instead of the old (offset + batch number)
+             walk, which clustered every start in the pool's head:
+             5 batches on 10 keys opened on Keys 1, 2, 3, 4, 5 and
+             never reached the tail at all. The distributed starts
+             for that case land on Keys 1, 3, 5, 7, 9 (before the
+             offset); each unit's chain then
+             walks forward with wraparound from its start key
+             (chainPairs rotates the full order around the start
+             pair). Split parts inherit their parent unit's start,
+             advanced one key per part (see toSingles), so a split
+             batch's parts also open on different keys. */
+          units.forEach(function(u, i){
+            u.ord = i;
+            u.startKi = (Math.floor(i * keys.length / Math.max(1, units.length)) + runOffset) % Math.max(1, keys.length);
+          });
           /* CANARY: only the first unit processed in this phase may
              claim the slow-split verdict (via runChain's onPassFail) —
              one batch-size pass of evidence, never more. */
@@ -7336,15 +7509,21 @@
                answer is captured, not merged: applyBatchChecked commits it
                only if every prompt passes the accuracy gate as Gemini's
                own work; otherwise this attempt fails as "invalid". */
-            function attempt(promptText){
+            var lastAnswerKi = -1;
+            /* Fresh circuit-breaker state for THIS processing of the
+               unit (see keySidelined in runChain): sidelined keys are
+               sidelined only here, never for later units. */
+            var unitBreaker = {};
+            function attempt(promptText, startKi){
               var left = budgetLeft();
               if (left <= 0){ var be = new Error("gemini-budget"); be.budgetExhausted = true; return Promise.reject(be); }
               var got = null;
-              return runChain(promptText, { attemptTimeoutMs: GEMINI_BATCH_TIMEOUT_MS, budgetMs: left, maxPasses: 4, creditRun: false, rescueLiteFirst: true, splitOnQuota: unitOpps.length > 1, waitNoun: "this prompt batch", onAttempt: function(ki, mi, p){
+              return runChain(promptText, { attemptTimeoutMs: unitOpps.length > 1 ? GEMINI_BATCH_TIMEOUT_MS : GEMINI_SINGLE_TIMEOUT_MS, budgetMs: left, maxPasses: 4, creditRun: false, rescueLiteFirst: true, splitOnQuota: unitOpps.length > 1, splitNow: unitOpps.length > 1, unitBreaker: unitBreaker, waitNoun: "this prompt batch", onAttempt: function(ki, mi, p){
                 phaseBase = "Writing prompts — " + unitLabel + " · " + promptsDone + " of " + promptsTotal + " ready · working through your keys · Key " + (ki + 1) + " / " + GEMINI_MODELS[mi] + (p > 1 ? " · pass " + p : "");
-              }, onPassFail: (isCanary && unitOpps.length > 1) ? function(stats){ return stats.timeouts > 0 && stats.e429 === 0; } : null, startPair: { ki: (runOffset + bIdx) % keys.length, mi: (promptsLeadMi != null ? promptsLeadMi : lastWin.mi) }, shouldStop: function(){ return phaseHalt; } }, function(json){
+              }, onPassFail: (isCanary && unitOpps.length > 1) ? function(stats){ return stats.timeouts > 0 && stats.e429 === 0; } : null, startPair: { ki: (startKi != null ? startKi : (unit.startKi != null ? unit.startKi : (runOffset + bIdx) % Math.max(1, keys.length))), mi: (promptsLeadMi != null ? promptsLeadMi : lastWin.mi) }, shouldStop: function(){ return phaseHalt; } }, function(json){
                 got = json; return json;
               }).then(function(r){
+                lastAnswerKi = r.ki;
                 var check = applyBatchChecked(unitOpps, got);
                 if (check.ok) return r;
                 var e = new Error("gemini-batch-invalid");
@@ -7389,13 +7568,34 @@
                 logLine("Google is slow today — switching to one opportunity at a time, so every answer stays small enough to finish", "warn");
                 return { ok: false, cause: err, parkAs: toSingles([unit]), splitAll: true };
               }
+              /* SPLIT ON FIRST FAILURE (Amendment, 2026-10-22 night):
+                 EVERY other failure of a batch-size unit — a chain
+                 walk that timed out (runChain's splitNow verdict), a
+                 budget-cut pass, or prompts that failed the accuracy
+                 gate — also continues as single-opportunity parts.
+                 No batch ever gets a second batch-size pass after a
+                 failed first one: batch 1 on the user's live run
+                 failed at batch size in the run AND again in the
+                 resume, while its 9-prompt single calls are a third
+                 of the generation and finish. The corrected re-ask
+                 still exists — at single-opportunity size, in the
+                 rejection handler below. */
+              if (unitOpps.length > 1){
+                logLine("batch " + (bIdx + 1) + " of " + totalBatches + " did not finish at batch size — it continues as " + unitOpps.length + " single opportunities, whose smaller calls finish far more easily", "warn");
+                return { ok: false, cause: err, parkAs: toSingles([unit]) };
+              }
               return { ok: false, cause: err };
             }
             return attempt(basePrompt).then(function(r){
               unitDone(r, false);
               return { ok: true };
             }, function(err){
-              if (err && (err.quotaSplit || err.slowSplit)) return failOutcome(err);
+              if (err && (err.quotaSplit || err.slowSplit || err.splitNow)) return failOutcome(err);
+              /* A batch-size answer that fails the accuracy gate
+                 splits like any other first failure (see failOutcome)
+                 — the corrected re-ask below is a single-opportunity
+                 remedy, so no batch ever repeats at batch size. */
+              if (err && err.message === "gemini-batch-invalid" && unitOpps.length > 1) return failOutcome(err);
               /* Validation gate: an answer whose prompts fail the
                  accuracy checks earns exactly ONE corrected re-ask —
                  the same batch, with the failed checks named in plain
@@ -7403,9 +7603,20 @@
                  substitute is never an option: if the re-ask fails
                  too, the unit is parked like any other failure. */
               if (err && err.message === "gemini-batch-invalid" && budgetLeft() > 3000){
-                logLine(unitLabel + " — some prompts failed the accuracy checks (" + err.invalidFails.join("; ") + "); asking Gemini once more with the corrections", "warn");
+                /* The corrected re-ask carries the same corrections
+                   text — but when the key that produced the invalid
+                   answer is already this run's most-used key, the
+                   re-ask OPENS on the next untried / least-used key
+                   instead of returning to that same answerer, so the
+                   correction work also spreads over the pool. */
+                var reaskKi = null;
+                if (lastAnswerKi >= 0 && isRunMostUsed(lastAnswerKi)){
+                  var altKi = leastUsedKeyIdx(lastAnswerKi);
+                  if (altKi >= 0 && altKi !== lastAnswerKi) reaskKi = altKi;
+                }
+                logLine(unitLabel + " — some prompts failed the accuracy checks (" + err.invalidFails.join("; ") + "); asking Gemini once more with the corrections" + (reaskKi != null ? " — this time opening on Key " + (reaskKi + 1) + ", so the work spreads over your keys" : ""), "warn");
                 var corr = basePrompt + "\n\nCORRECTION — your previous answer for these opportunities contained invalid prompts: " + err.invalidFails.join("; ") + ". Return the complete JSON for these opportunities again: every prompt a complete JSON object with all 9 fields, a colour palette of real hex values, metadata with a title, a description, a category and at least 3 tags, scenes that match each opportunity's own title exactly, and video prompts with real motion, a named camera movement and a start-to-end progression.";
-                return attempt(corr).then(function(r2){
+                return attempt(corr, reaskKi).then(function(r2){
                   unitDone(r2, true);
                   return { ok: true };
                 }, function(err2){ return failOutcome(err2); });
@@ -7473,7 +7684,11 @@
               return seqLoop();
             });
           }
-          return seqLoop();
+          /* Before the first unit is written, finish any probe
+             coverage the opening probe's budget did not reach — no
+             live key enters the prompts phase unattempted (see
+             completeProbeCoverage). */
+          return completeProbeCoverage().then(function(){ return seqLoop(); });
         }
         /* The run OPENS with the model probe (fresh and resume alike):
            the lead it finds seeds lastWin, the sweep and the brief
